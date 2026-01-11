@@ -6,11 +6,12 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +35,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -53,6 +56,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.graphicsLayer
 
 // --- Components ---
 
@@ -90,6 +95,13 @@ fun BerlinClock(time: Calendar) {
     val minutes = time.get(Calendar.MINUTE)
     val seconds = time.get(Calendar.SECOND)
 
+    // Track previous 5-hour count for thud animation
+    val current5HourCount = hours / 5
+    var previous5HourCount by remember { mutableStateOf(current5HourCount) }
+    
+    // Thud animation scale
+    val thudScale = remember { Animatable(1f) }
+
     // Haptics for Berlin Clock (Every 5 minutes)
     val context = LocalContext.current
     val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -98,6 +110,35 @@ fun BerlinClock(time: Calendar) {
     } else {
         @Suppress("DEPRECATION")
         context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+    }
+
+    // Thud animation when 5-hour block fills
+    LaunchedEffect(current5HourCount) {
+        if (current5HourCount != previous5HourCount && current5HourCount > 0) {
+            // Trigger thud animation
+            thudScale.animateTo(
+                targetValue = 1.15f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            )
+            thudScale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+            // Heavy haptic feedback for thud
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(100)
+            }
+        }
+        previous5HourCount = current5HourCount
     }
 
     LaunchedEffect(minutes) {
@@ -116,20 +157,39 @@ fun BerlinClock(time: Calendar) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Seconds Lamp
-        BerlinLamp(active = seconds % 2 == 0, color = Color.Yellow, shape = CircleShape, size = 60.dp)
+        // Seconds Lamp with neon glow
+        NeonBerlinLamp(
+            active = seconds % 2 == 0, 
+            color = Color.Yellow, 
+            shape = CircleShape, 
+            size = 60.dp
+        )
 
-        // 5 Hours Row
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // 5 Hours Row with thud animation
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.graphicsLayer {
+                scaleX = thudScale.value
+                scaleY = thudScale.value
+            }
+        ) {
             repeat(4) { i ->
-                BerlinLamp(active = hours / 5 > i, color = Color.Red, modifier = Modifier.weight(1f).height(50.dp))
+                NeonBerlinLamp(
+                    active = hours / 5 > i, 
+                    color = Color.Red, 
+                    modifier = Modifier.weight(1f).height(50.dp)
+                )
             }
         }
 
         // 1 Hour Row
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             repeat(4) { i ->
-                BerlinLamp(active = hours % 5 > i, color = Color.Red, modifier = Modifier.weight(1f).height(50.dp))
+                NeonBerlinLamp(
+                    active = hours % 5 > i, 
+                    color = Color.Red, 
+                    modifier = Modifier.weight(1f).height(50.dp)
+                )
             }
         }
 
@@ -138,19 +198,107 @@ fun BerlinClock(time: Calendar) {
             repeat(11) { i ->
                 val isRed = (i + 1) % 3 == 0
                 val c = if (isRed) Color.Red else Color.Yellow
-                BerlinLamp(active = minutes / 5 > i, color = c, modifier = Modifier.weight(1f).height(50.dp))
+                NeonBerlinLamp(
+                    active = minutes / 5 > i, 
+                    color = c, 
+                    modifier = Modifier.weight(1f).height(50.dp)
+                )
             }
         }
 
         // 1 Minute Row
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             repeat(4) { i ->
-                BerlinLamp(active = minutes % 5 > i, color = Color.Yellow, modifier = Modifier.weight(1f).height(50.dp))
+                NeonBerlinLamp(
+                    active = minutes % 5 > i, 
+                    color = Color.Yellow, 
+                    modifier = Modifier.weight(1f).height(50.dp)
+                )
             }
         }
     }
 }
 
+/**
+ * Enhanced Berlin Lamp with Neon Glow Effect
+ */
+@Composable
+fun NeonBerlinLamp(
+    active: Boolean,
+    color: Color,
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(8.dp),
+    size: androidx.compose.ui.unit.Dp? = null
+) {
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (active) 1f else 0.08f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "alpha"
+    )
+    
+    val glowIntensity by animateFloatAsState(
+        targetValue = if (active) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "glow"
+    )
+
+    val mod = if (size != null) modifier.size(size) else modifier
+
+    Box(
+        modifier = mod
+            // Outer neon glow
+            .shadow(
+                elevation = if (active) 20.dp else 0.dp,
+                shape = shape,
+                spotColor = color.copy(alpha = 0.8f * glowIntensity),
+                ambientColor = color.copy(alpha = 0.4f * glowIntensity)
+            )
+            // Inner neon glow layer
+            .drawBehind {
+                if (active) {
+                    // Multiple glow layers for neon effect
+                    drawRoundRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                color.copy(alpha = 0.6f * glowIntensity),
+                                color.copy(alpha = 0.3f * glowIntensity),
+                                Color.Transparent
+                            ),
+                            center = Offset(this.size.width / 2, this.size.height / 2),
+                            radius = this.size.maxDimension
+                        )
+                    )
+                }
+            }
+            .background(color.copy(alpha = animatedAlpha), shape)
+            .border(2.dp, Color.White.copy(alpha = 0.2f + 0.3f * glowIntensity), shape)
+    ) {
+        // Glass highlight reflection
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.4f * animatedAlpha),
+                            Color.Transparent
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(100f, 100f)
+                    ),
+                    shape
+                )
+        )
+    }
+}
+
+// Keep old BerlinLamp for backward compatibility
 @Composable
 fun BerlinLamp(
     active: Boolean,
@@ -159,41 +307,7 @@ fun BerlinLamp(
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(8.dp),
     size: androidx.compose.ui.unit.Dp? = null
 ) {
-    val animatedAlpha by animateFloatAsState(
-        targetValue = if (active) 1f else 0.1f, // Dimmer when off for contrast
-        label = "alpha"
-    )
-    val glowRadius by animateFloatAsState(
-        targetValue = if (active) 10.dp.value else 0f,
-        label = "glow"
-    )
-
-    val mod = if (size != null) modifier.size(size) else modifier
-
-    Box(
-        modifier = mod
-            .shadow(
-                elevation = if(active) 10.dp else 0.dp,
-                shape = shape,
-                spotColor = color
-            )
-            .background(color.copy(alpha = animatedAlpha), shape)
-            .border(2.dp, Color.White.copy(alpha = 0.3f), shape)
-    ) {
-        // "Glass" reflection
-         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color.White.copy(alpha=0.4f), Color.Transparent),
-                        start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                        end = androidx.compose.ui.geometry.Offset(100f, 100f)
-                    ),
-                    shape
-                )
-        )
-    }
+    NeonBerlinLamp(active, color, modifier, shape, size)
 }
 
 @Composable
@@ -231,7 +345,7 @@ fun BinaryClock(time: Calendar) {
 
                 for (bit in (bitCounts[index] - 1) downTo 0) {
                     val isActive = ((digit shr bit) and 1) == 1
-                    BinaryDot(isActive = isActive)
+                    GlowingOrb(isActive = isActive)
                 }
             }
             if (index == 1 || index == 3) {
@@ -241,29 +355,124 @@ fun BinaryClock(time: Calendar) {
     }
 }
 
+/**
+ * Enhanced Binary Dot as "Glowing Orb" with radial gradients and blur bloom
+ */
 @Composable
-fun BinaryDot(isActive: Boolean) {
+fun GlowingOrb(isActive: Boolean) {
+    val orbColor = Color(0xFF00E5FF)
+    
     val color by animateColorAsState(
-        targetValue = if (isActive) Color(0xFF00E5FF) else Color(0xFF00E5FF).copy(alpha = 0.1f),
+        targetValue = if (isActive) orbColor else orbColor.copy(alpha = 0.08f),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "color"
     )
+    
     val scale by animateFloatAsState(
         targetValue = if (isActive) 1.2f else 0.8f,
-        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "scale"
+    )
+    
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isActive) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "glowAlpha"
     )
 
     Box(
         modifier = Modifier
-            .size(36.dp * scale)
-            .shadow(if (isActive) 15.dp else 0.dp, CircleShape, spotColor = color)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(color, color.copy(alpha = 0.5f), Color.Transparent)
+            .size(40.dp * scale)
+            // Outer bloom glow
+            .shadow(
+                elevation = if (isActive) 20.dp else 0.dp,
+                shape = CircleShape,
+                spotColor = orbColor.copy(alpha = 0.8f * glowAlpha),
+                ambientColor = orbColor.copy(alpha = 0.5f * glowAlpha)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        // Bloom blur layer (background glow)
+        if (isActive) {
+            Canvas(
+                modifier = Modifier
+                    .size(50.dp * scale)
+                    .blur(8.dp)
+            ) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            orbColor.copy(alpha = 0.8f),
+                            orbColor.copy(alpha = 0.4f),
+                            Color.Transparent
+                        )
+                    ),
+                    radius = size.minDimension / 2
+                )
+            }
+        }
+        
+        // Core orb with radial gradient
+        Canvas(
+            modifier = Modifier.size(36.dp * scale)
+        ) {
+            // Outer glow ring
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        color.copy(alpha = 0.6f * glowAlpha),
+                        color.copy(alpha = 0.3f * glowAlpha),
+                        Color.Transparent
+                    )
                 ),
-                CircleShape
+                radius = size.minDimension / 2 * 1.5f
             )
-    )
+            
+            // Main orb body
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = if (isActive) listOf(
+                        Color.White.copy(alpha = 0.9f),
+                        orbColor,
+                        orbColor.copy(alpha = 0.7f)
+                    ) else listOf(
+                        color.copy(alpha = 0.3f),
+                        color.copy(alpha = 0.1f)
+                    )
+                ),
+                radius = size.minDimension / 2
+            )
+            
+            // Inner bright core
+            if (isActive) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White,
+                            Color.White.copy(alpha = 0.5f),
+                            Color.Transparent
+                        )
+                    ),
+                    radius = size.minDimension / 4
+                )
+            }
+        }
+    }
+}
+
+// Keep old BinaryDot for backward compatibility
+@Composable
+fun BinaryDot(isActive: Boolean) {
+    GlowingOrb(isActive)
 }
 
 @Composable

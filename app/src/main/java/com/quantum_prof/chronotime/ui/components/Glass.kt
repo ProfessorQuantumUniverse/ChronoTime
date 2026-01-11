@@ -1,5 +1,7 @@
 package com.quantum_prof.chronotime.ui.components
 
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.os.Build
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -7,35 +9,42 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RenderEffect
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.quantum_prof.chronotime.ui.theme.GlassBorder
 import com.quantum_prof.chronotime.ui.theme.GlassWhite
+import kotlin.random.Random
 
 /**
- * Enhanced Deep Glass Card with Superellipse shape and advanced effects
- * "Frosted Glass" that feels like etched glass floating above the background
+ * Enhanced Deep Glass Card with Superellipse shape, RenderEffect blur, 
+ * white noise texture overlay, and advanced "Frosted Glass" effects
+ * for the "Deep Glass" aesthetic.
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
     blurRadius: Dp = 30.dp,
-    shape: RoundedCornerShape = RoundedCornerShape(32.dp), // More rounded for superellipse feel
+    shape: RoundedCornerShape = RoundedCornerShape(32.dp),
     glowColor: Color = Color(0xFF00F0FF),
     enableGlow: Boolean = true,
     content: @Composable () -> Unit
@@ -64,49 +73,109 @@ fun GlassCard(
         label = "reflection"
     )
 
-    Box(
+    // Breathing scale for organic feel
+    val breathScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.005f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathScale"
+    )
+
+    // Pre-generate noise pattern for performance
+    val noisePattern = remember { generateNoisePattern() }
+
+    BoxWithConstraints(
         modifier = modifier
+            // Scale breathing effect
+            .graphicsLayer {
+                scaleX = breathScale
+                scaleY = breathScale
+            }
+            // Apply RenderEffect blur on Android 12+ for true frosted glass
+            .then(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Modifier.graphicsLayer {
+                        renderEffect = RenderEffect
+                            .createBlurEffect(
+                                blurRadius.value,
+                                blurRadius.value,
+                                Shader.TileMode.CLAMP
+                            )
+                            .asComposeRenderEffect()
+                    }
+                } else {
+                    Modifier.blur(blurRadius / 2)
+                }
+            )
             // Outer glow (ambient shadow)
             .shadow(
-                elevation = 20.dp,
+                elevation = 24.dp,
                 shape = shape,
                 spotColor = if (enableGlow) glowColor.copy(alpha = glowAlpha) else Color.Black.copy(alpha = 0.3f),
                 ambientColor = if (enableGlow) glowColor.copy(alpha = glowAlpha * 0.5f) else Color.Black.copy(alpha = 0.1f)
             )
             .clip(shape)
-            // Multi-layer glass effect
+            // Multi-layer glass effect with depth
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.15f),
-                        Color.White.copy(alpha = 0.08f),
-                        Color.White.copy(alpha = 0.05f),
-                        Color.White.copy(alpha = 0.1f)
+                        Color.White.copy(alpha = 0.18f),
+                        Color.White.copy(alpha = 0.10f),
+                        Color.White.copy(alpha = 0.06f),
+                        Color.White.copy(alpha = 0.12f)
                     )
                 )
             )
-            // Inner shadow for depth
+            // White noise texture overlay for glass grain
+            .drawWithContent {
+                drawContent()
+                // Draw subtle noise texture
+                noisePattern.forEach { (xRatio, yRatio, alpha) ->
+                    drawCircle(
+                        color = Color.White.copy(alpha = alpha * 0.015f),
+                        radius = 0.5f,
+                        center = Offset(size.width * xRatio, size.height * yRatio)
+                    )
+                }
+            }
+            // Inner shadow and reflections for depth
             .drawBehind {
-                // Top edge highlight
+                // Top edge highlight (bevel effect)
                 drawRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.3f),
+                            Color.White.copy(alpha = 0.35f),
+                            Color.White.copy(alpha = 0.1f),
                             Color.Transparent
                         ),
                         startY = 0f,
-                        endY = 30f
+                        endY = 50f
                     )
                 )
 
-                // Moving light reflection
+                // Bottom edge subtle shadow (inner)
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.05f)
+                        ),
+                        startY = size.height - 30f,
+                        endY = size.height
+                    )
+                )
+
+                // Moving light reflection (caustic effect)
                 drawRect(
                     brush = Brush.linearGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color.White.copy(alpha = 0.1f),
-                            Color.White.copy(alpha = 0.2f),
-                            Color.White.copy(alpha = 0.1f),
+                            Color.White.copy(alpha = 0.08f),
+                            Color.White.copy(alpha = 0.15f),
+                            Color.White.copy(alpha = 0.08f),
                             Color.Transparent
                         ),
                         start = Offset(reflectionOffset, 0f),
@@ -114,16 +183,16 @@ fun GlassCard(
                     )
                 )
             }
-            // Glowing border with gradient
+            // 10% opacity white border stroke (as specified)
             .border(
                 BorderStroke(
-                    1.5.dp,
+                    1.dp,
                     Brush.linearGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.5f),
-                            Color.White.copy(alpha = 0.2f),
+                            Color.White.copy(alpha = 0.4f),
+                            Color.White.copy(alpha = 0.15f),
                             Color.White.copy(alpha = 0.1f),
-                            Color.White.copy(alpha = 0.3f)
+                            Color.White.copy(alpha = 0.25f)
                         )
                     )
                 ),
@@ -132,6 +201,20 @@ fun GlassCard(
             .padding(24.dp)
     ) {
         content()
+    }
+}
+
+/**
+ * Generate a pre-computed noise pattern for glass texture
+ */
+private fun generateNoisePattern(): List<Triple<Float, Float, Float>> {
+    val random = Random(42) // Fixed seed for consistent pattern
+    return List(200) {
+        Triple(
+            random.nextFloat(),
+            random.nextFloat(),
+            random.nextFloat()
+        )
     }
 }
 

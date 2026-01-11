@@ -174,8 +174,9 @@ fun SynesthesiaClock(time: Calendar) {
 }
 
 /**
- * Fluid Hourglass
+ * Fluid Hourglass with Physics-Based Tilt Simulation
  * Der Bildschirm füllt sich langsam mit digitaler Flüssigkeit entsprechend der Tageszeit
+ * The liquid tilts realistically when the phone is tilted using gyroscope data
  */
 @Composable
 fun FluidHourglass(
@@ -191,6 +192,29 @@ fun FluidHourglass(
     val totalSeconds = hour * 3600 + minute * 60 + second
     val dayProgress = totalSeconds / 86400f
 
+    // Physics-based tilt simulation with spring animation
+    val animatedTiltX by animateFloatAsState(
+        targetValue = tiltX,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "tiltX"
+    )
+    
+    val animatedTiltY by animateFloatAsState(
+        targetValue = tiltY,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "tiltY"
+    )
+
+    // Calculate tilt influence on fluid surface angle
+    val tiltInfluence = (animatedTiltX * 50).coerceIn(-60f, 60f)
+    val surfaceTiltAngle = animatedTiltX * 15f // Degrees of surface tilt
+
     // Fluid wave animation
     val infiniteTransition = rememberInfiniteTransition(label = "fluid")
     val waveOffset by infiniteTransition.animateFloat(
@@ -203,7 +227,7 @@ fun FluidHourglass(
         label = "wave"
     )
 
-    // Secondary wave
+    // Secondary wave (slower, larger)
     val waveOffset2 by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 2 * PI.toFloat(),
@@ -213,9 +237,28 @@ fun FluidHourglass(
         ),
         label = "wave2"
     )
+    
+    // Tertiary wave for more organic feel
+    val waveOffset3 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 2 * PI.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(4500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wave3"
+    )
 
-    // Gyroscope-based wave distortion
-    val tiltInfluence = (tiltX * 30).coerceIn(-50f, 50f)
+    // Bubble animation phase
+    val bubblePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(5000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "bubbles"
+    )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -229,7 +272,7 @@ fun FluidHourglass(
             val fluidHeight = size.height * dayProgress
             val fluidTop = size.height - fluidHeight
 
-            // Hourglass container outline
+            // Hourglass container outline with beveled edges
             val containerPath = Path().apply {
                 moveTo(size.width * 0.1f, 0f)
                 lineTo(size.width * 0.9f, 0f)
@@ -244,32 +287,46 @@ fun FluidHourglass(
 
             // Clip to hourglass shape
             clipPath(containerPath) {
-                // Fluid gradient
-                val fluidBrush = Brush.verticalGradient(
+                // Dynamic fluid gradient that shifts with tilt
+                val gradientStartX = size.width * 0.3f + tiltInfluence * 2
+                val gradientEndX = size.width * 0.7f - tiltInfluence * 2
+                
+                val fluidBrush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF00D2FF).copy(alpha = 0.3f),
-                        Color(0xFF3A7BD5).copy(alpha = 0.6f),
-                        Color(0xFF00D2FF).copy(alpha = 0.8f),
+                        Color(0xFF00D2FF).copy(alpha = 0.4f),
+                        Color(0xFF3A7BD5).copy(alpha = 0.7f),
+                        Color(0xFF00D2FF).copy(alpha = 0.9f),
                         Color(0xFF3A7BD5)
                     ),
-                    startY = fluidTop,
-                    endY = size.height
+                    start = Offset(gradientStartX, fluidTop),
+                    end = Offset(gradientEndX, size.height)
                 )
 
-                // Draw fluid with wave effect
+                // Draw fluid with physics-based tilted surface
                 val fluidPath = Path().apply {
                     moveTo(0f, size.height)
-                    lineTo(0f, fluidTop)
+                    
+                    // Left side (affected by tilt)
+                    val leftSideHeight = fluidTop + tiltInfluence
+                    lineTo(0f, leftSideHeight.coerceIn(0f, size.height))
 
-                    // Create wave pattern
+                    // Create wave pattern along the tilted surface
                     var x = 0f
                     while (x <= size.width) {
-                        val y = fluidTop +
-                            sin(waveOffset + x * 0.03f) * 8 +
-                            sin(waveOffset2 + x * 0.05f) * 5 +
-                            tiltInfluence * sin(x * 0.02f)
-                        lineTo(x, y)
-                        x += 5f
+                        // Base height interpolates from left to right based on tilt
+                        val tiltedBaseHeight = leftSideHeight + (x / size.width) * (-tiltInfluence * 2)
+                        
+                        // Add multiple wave frequencies for realistic fluid motion
+                        val wave1 = sin(waveOffset + x * 0.03f) * 8
+                        val wave2 = sin(waveOffset2 + x * 0.05f) * 5
+                        val wave3 = sin(waveOffset3 + x * 0.02f) * 3
+                        
+                        // Waves are more pronounced when device is still
+                        val waveAmplitude = 1f - abs(animatedTiltX) * 0.5f
+                        val y = tiltedBaseHeight + (wave1 + wave2 + wave3) * waveAmplitude
+                        
+                        lineTo(x, y.coerceIn(0f, size.height))
+                        x += 3f
                     }
 
                     lineTo(size.width, size.height)
@@ -278,49 +335,129 @@ fun FluidHourglass(
 
                 drawPath(fluidPath, fluidBrush)
 
-                // Bubble effects
-                val bubbleCount = 15
+                // Physics-based bubble effects that rise and drift with tilt
+                val bubbleCount = 20
                 repeat(bubbleCount) { i ->
-                    val bubbleX = (size.width * (i.toFloat() / bubbleCount)) + sin(waveOffset + i) * 20
-                    val bubbleY = fluidTop + (size.height - fluidTop) * ((i * 7 + second) % 100) / 100f
-                    val bubbleSize = 4f + (i % 5) * 2
+                    // Bubble position affected by tilt (drift toward lower side)
+                    val baseBubbleX = (size.width * (i.toFloat() / bubbleCount))
+                    val bubbleDrift = tiltInfluence * ((size.height - fluidTop) / size.height) * 0.5f
+                    val bubbleX = (baseBubbleX + bubbleDrift + sin(waveOffset + i) * 15)
+                        .coerceIn(0f, size.width)
+                    
+                    // Bubble rises from bottom, with phase offset
+                    val bubbleProgress = ((bubblePhase + i * 0.05f) % 1f)
+                    val bubbleY = size.height - (size.height - fluidTop) * bubbleProgress
+                    
+                    val bubbleSize = 3f + (i % 5) * 1.5f + sin(waveOffset + i * 0.5f) * 1f
 
-                    if (bubbleY > fluidTop) {
+                    // Only draw bubbles within the fluid
+                    if (bubbleY > fluidTop && bubbleY < size.height) {
+                        // Bubble glow
                         drawCircle(
-                            color = Color.White.copy(alpha = 0.3f),
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.4f),
+                                    Color.White.copy(alpha = 0.1f),
+                                    Color.Transparent
+                                ),
+                                center = Offset(bubbleX, bubbleY),
+                                radius = bubbleSize * 2
+                            ),
+                            radius = bubbleSize * 2,
+                            center = Offset(bubbleX, bubbleY)
+                        )
+                        
+                        // Bubble core
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.5f - bubbleProgress * 0.3f),
                             radius = bubbleSize,
                             center = Offset(bubbleX, bubbleY)
                         )
+                        
+                        // Bubble highlight
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.8f - bubbleProgress * 0.5f),
+                            radius = bubbleSize * 0.4f,
+                            center = Offset(bubbleX - bubbleSize * 0.3f, bubbleY - bubbleSize * 0.3f)
+                        )
                     }
                 }
+                
+                // Surface foam/froth at the top of the liquid
+                val foamPath = Path().apply {
+                    var foamX = 0f
+                    val leftHeight = fluidTop + tiltInfluence
+                    moveTo(0f, leftHeight.coerceIn(0f, size.height))
+                    while (foamX <= size.width) {
+                        val tiltedBaseHeight = leftHeight + (foamX / size.width) * (-tiltInfluence * 2)
+                        val foamWave = sin(waveOffset * 2 + foamX * 0.08f) * 4
+                        lineTo(foamX, (tiltedBaseHeight + foamWave).coerceIn(0f, size.height))
+                        foamX += 5f
+                    }
+                    val rightHeight = leftHeight - tiltInfluence * 2
+                    lineTo(size.width, rightHeight.coerceIn(0f, size.height))
+                    // Close back to start for foam strip
+                    foamX = size.width
+                    while (foamX >= 0f) {
+                        val tiltedBaseHeight = leftHeight + (foamX / size.width) * (-tiltInfluence * 2)
+                        lineTo(foamX, (tiltedBaseHeight + 15).coerceIn(0f, size.height))
+                        foamX -= 5f
+                    }
+                    close()
+                }
+                drawPath(
+                    foamPath,
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.3f),
+                            Color.Transparent
+                        )
+                    )
+                )
             }
 
-            // Glass container with reflection
+            // Glass container with enhanced reflection
             drawPath(
                 containerPath,
-                color = Color.White.copy(alpha = 0.3f),
+                color = Color.White.copy(alpha = 0.35f),
                 style = Stroke(width = 3f, cap = StrokeCap.Round)
             )
 
-            // Glass reflection highlight
+            // Glass reflection highlight (moves with tilt)
             val reflectionPath = Path().apply {
-                moveTo(size.width * 0.15f, size.height * 0.05f)
-                lineTo(size.width * 0.25f, size.height * 0.05f)
-                lineTo(size.width * 0.5f, size.height * 0.4f)
-                lineTo(size.width * 0.48f, size.height * 0.4f)
+                val reflectionOffset = tiltInfluence * 0.3f
+                moveTo(size.width * 0.15f + reflectionOffset, size.height * 0.05f)
+                lineTo(size.width * 0.25f + reflectionOffset, size.height * 0.05f)
+                lineTo(size.width * 0.5f + reflectionOffset * 0.5f, size.height * 0.4f)
+                lineTo(size.width * 0.48f + reflectionOffset * 0.5f, size.height * 0.4f)
                 close()
             }
-            drawPath(reflectionPath, Color.White.copy(alpha = 0.15f))
+            drawPath(reflectionPath, Color.White.copy(alpha = 0.2f))
+            
+            // Secondary reflection on opposite side
+            val reflectionPath2 = Path().apply {
+                val reflectionOffset = -tiltInfluence * 0.2f
+                moveTo(size.width * 0.75f + reflectionOffset, size.height * 0.95f)
+                lineTo(size.width * 0.85f + reflectionOffset, size.height * 0.95f)
+                lineTo(size.width * 0.52f + reflectionOffset * 0.5f, size.height * 0.6f)
+                lineTo(size.width * 0.50f + reflectionOffset * 0.5f, size.height * 0.6f)
+                close()
+            }
+            drawPath(reflectionPath2, Color.White.copy(alpha = 0.1f))
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Progress text
+        // Progress text with glow
         Text(
             text = "${(dayProgress * 100).toInt()}%",
             style = MaterialTheme.typography.displayMedium.copy(
                 fontWeight = FontWeight.Light,
-                color = Color(0xFF00D2FF)
+                color = Color(0xFF00D2FF),
+                shadow = Shadow(
+                    color = Color(0xFF00D2FF).copy(alpha = 0.5f),
+                    blurRadius = 20f
+                )
             )
         )
 
