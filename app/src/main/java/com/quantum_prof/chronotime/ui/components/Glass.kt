@@ -105,10 +105,10 @@ private val GRAIN_NOISE_SHADER: String by lazy {
  * - Specular gradient border (light hitting top-left edge)
  * - Inner glow at top, inner shadow at bottom for 3D volume
  * 
- * Note: The glassmorphism effect works by having a semi-transparent surface
- * that lets the background (particles, gradients) show through with a frosted look.
- * The CONTENT on the glass stays sharp - only background elements appear blurred
- * because they're rendered behind this semi-transparent layer.
+ * Note: The glassmorphism effect is achieved through semi-transparency and grain
+ * texture - NOT through blur. Background elements (particles, gradients) show 
+ * through the translucent surface, creating a frosted glass appearance.
+ * The content (text, clocks) remains razor-sharp and highly readable.
  */
 @Composable
 fun GlassCard(
@@ -171,11 +171,11 @@ fun GlassCard(
                 scaleX = breathScale
                 scaleY = breathScale
             }
-            // NOTE: Blur is intentionally NOT applied here.
+            // NOTE: No blur is applied to this composable.
             // Content (text, clocks) must remain sharp and readable.
-            // The "frosted glass" effect comes from the semi-transparent background
-            // and noise texture - background elements behind the card naturally 
-            // appear "frosted" through the translucent surface.
+            // The glassmorphism effect comes from semi-transparency and
+            // grain texture - NOT blur. Background elements show through
+            // the translucent surface.
             
             // Outer glow (ambient shadow) - enhanced depth
             .shadow(
