@@ -1,8 +1,6 @@
 package com.quantum_prof.chronotime.ui.components
 
-import android.graphics.RenderEffect
 import android.graphics.RuntimeShader
-import android.graphics.Shader
 import android.os.Build
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -18,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -28,13 +25,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.quantum_prof.chronotime.ui.theme.GlassBorder
-import com.quantum_prof.chronotime.ui.theme.GlassWhite
 import kotlin.random.Random
 
 /**
@@ -108,18 +100,19 @@ private val GRAIN_NOISE_SHADER: String by lazy {
 /**
  * Enhanced Deep Glass Card with "Hyper-Real" Glass Effect
  * Implements:
- * - High-radius background blur (35dp default, configurable for performance)
+ * - Semi-transparent glass overlay (content remains sharp and readable)
  * - Animated AGSL grain shader for frosted glass texture (Android 13+)
  * - Specular gradient border (light hitting top-left edge)
  * - Inner glow at top, inner shadow at bottom for 3D volume
  * 
- * Performance note: Higher blur radius increases GPU load. On lower-end devices,
- * consider reducing blurRadius to 25-30dp for smoother performance.
+ * Note: The glassmorphism effect works by having a semi-transparent surface
+ * that lets the background (particles, gradients) show through with a frosted look.
+ * The CONTENT on the glass stays sharp - only background elements appear blurred
+ * because they're rendered behind this semi-transparent layer.
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    blurRadius: Dp = 35.dp, // Configurable for performance tuning
     shape: RoundedCornerShape = RoundedCornerShape(32.dp),
     glowColor: Color = Color(0xFF00F0FF),
     enableGlow: Boolean = true,
@@ -178,22 +171,12 @@ fun GlassCard(
                 scaleX = breathScale
                 scaleY = breathScale
             }
-            // Apply RenderEffect blur on Android 12+ for true frosted glass
-            .then(
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    Modifier.graphicsLayer {
-                        renderEffect = RenderEffect
-                            .createBlurEffect(
-                                blurRadius.value,
-                                blurRadius.value,
-                                Shader.TileMode.CLAMP
-                            )
-                            .asComposeRenderEffect()
-                    }
-                } else {
-                    Modifier.blur(blurRadius / 2)
-                }
-            )
+            // NOTE: Blur is intentionally NOT applied here.
+            // Content (text, clocks) must remain sharp and readable.
+            // The "frosted glass" effect comes from the semi-transparent background
+            // and noise texture - background elements behind the card naturally 
+            // appear "frosted" through the translucent surface.
+            
             // Outer glow (ambient shadow) - enhanced depth
             .shadow(
                 elevation = 32.dp,
