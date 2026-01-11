@@ -56,7 +56,7 @@ fun AutoScalingText(
     textAlign: TextAlign? = null
 ) {
     var shouldDraw by remember { mutableStateOf(false) }
-    var scaledFontSize by remember(text) { mutableStateOf(maxFontSize) }
+    var scaledFontSize by remember(text, maxFontSize) { mutableStateOf(maxFontSize) }
     
     BoxWithConstraints(modifier = modifier) {
         val density = LocalDensity.current
@@ -64,14 +64,20 @@ fun AutoScalingText(
         
         // Calculate initial font size based on available width
         val calculatedFontSize = with(density) {
-            (maxWidthPx * scalingFactor / text.length.coerceAtLeast(1)).coerceIn(
+            val pixelSize = (maxWidthPx * scalingFactor / text.length.coerceAtLeast(1)).coerceIn(
                 minFontSize.toPx(),
                 maxFontSize.toPx()
-            ).sp
+            )
+            pixelSize.sp
         }
         
-        // Use smaller of calculated and max font size
-        val targetFontSize = if (calculatedFontSize.value < maxFontSize.value) calculatedFontSize else maxFontSize
+        // Initialize scaledFontSize with calculated value to avoid visual flicker
+        val initialFontSize = if (calculatedFontSize.value < maxFontSize.value) calculatedFontSize else maxFontSize
+        
+        // Reset shouldDraw and font size when text changes
+        if (!shouldDraw && scaledFontSize == maxFontSize && initialFontSize.value < maxFontSize.value) {
+            scaledFontSize = initialFontSize
+        }
         
         Text(
             text = text,
