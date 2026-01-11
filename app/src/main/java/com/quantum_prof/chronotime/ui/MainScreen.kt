@@ -469,9 +469,13 @@ fun MainScreen() {
                             ) { glassContent() }
                         }
                         else -> {
-                            GlassCard(
+                            // Use LiquidGlassCard for premium liquid glass effect
+                            // with blur that extends beyond card bounds (no clipping)
+                            LiquidGlassCard(
                                 modifier = Modifier.offset(x = -parallaxX / 2, y = -parallaxY / 2),
-                                glowColor = animatedPrimaryColor
+                                glowColor = animatedPrimaryColor,
+                                blurRadius = 24f,
+                                enableLens = true
                             ) { glassContent() }
                         }
                     }

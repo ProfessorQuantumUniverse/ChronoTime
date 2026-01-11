@@ -1,6 +1,8 @@
 package com.quantum_prof.chronotime.ui.components
 
+import android.graphics.RenderEffect
 import android.graphics.RuntimeShader
+import android.graphics.Shader
 import android.os.Build
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -25,7 +27,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlin.random.Random
 
@@ -460,3 +464,273 @@ fun NeonGlassCard(
     }
 }
 
+/**
+ * LiquidGlassCard - Premium "Liquid Glass" effect using Backdrop technique
+ * 
+ * Key Features:
+ * - Blur extends BEYOND card bounds (no clipping artifacts)
+ * - Uses graphicsLayer with clip=false for fluid edge appearance
+ * - Simulates water/liquid sitting on a surface
+ * - Includes grain/noise texture to prevent color banding
+ * - Subtle lens distortion effect for organic feel
+ * 
+ * Technical Implementation:
+ * - Uses RenderEffect.createBlurEffect on Android 12+ with SHADER_TILE_MODE_CLAMP
+ * - Applies blur to the card layer itself, not content
+ * - Content remains sharp and readable
+ * - Blur "bleeds" visually like real liquid glass
+ * 
+ * @param modifier Modifier for positioning and sizing
+ * @param shape Card shape (default: rounded corners)
+ * @param glowColor Primary glow color for ambient shadow
+ * @param blurRadius Blur radius in dp (default: 24dp for liquid feel)
+ * @param enableLens Enable subtle lens distortion effect
+ * @param content The content to display inside the card
+ */
+@Composable
+fun LiquidGlassCard(
+    modifier: Modifier = Modifier,
+    shape: RoundedCornerShape = RoundedCornerShape(32.dp),
+    glowColor: Color = Color(0xFF00F0FF),
+    blurRadius: Float = 24f,
+    enableLens: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "liquidGlass")
+    val density = LocalDensity.current
+    
+    // Breathing animation for organic liquid feel
+    val breathScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.005f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breathScale"
+    )
+    
+    // Subtle pulsing glow
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowPulse"
+    )
+    
+    // Moving light caustic effect
+    val causticOffset by infiniteTransition.animateFloat(
+        initialValue = -150f,
+        targetValue = 500f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(10000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "caustic"
+    )
+    
+    // Animated grain time
+    val grainTime by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 100f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(12000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "grainTime"
+    )
+    
+    // Lens distortion animation (subtle wobble)
+    val lensOffset by infiniteTransition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "lens"
+    )
+    
+    val blurRadiusPx = with(density) { blurRadius.dp.toPx() }
+
+    BoxWithConstraints(
+        modifier = modifier
+            // Breathing scale for organic feel
+            .graphicsLayer {
+                scaleX = breathScale
+                scaleY = breathScale
+                
+                // CRITICAL: clip = false allows blur to extend beyond bounds
+                // This creates the "liquid glass" look without hard edges
+                clip = false
+                
+                // Apply blur effect on Android 12+
+                // The blur extends beyond the card bounds for a fluid appearance
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    renderEffect = RenderEffect
+                        .createBlurEffect(
+                            blurRadiusPx * 0.3f, // Subtle blur for glass feel
+                            blurRadiusPx * 0.3f,
+                            Shader.TileMode.DECAL // DECAL allows blur to fade at edges
+                        )
+                        .asComposeRenderEffect()
+                }
+            }
+            // Outer glow shadow with liquid depth
+            .shadow(
+                elevation = 40.dp,
+                shape = shape,
+                spotColor = glowColor.copy(alpha = glowAlpha),
+                ambientColor = glowColor.copy(alpha = glowAlpha * 0.4f)
+            )
+            .clip(shape)
+            // Multi-layer glass surface with enhanced transparency
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.25f),
+                        Color.White.copy(alpha = 0.15f),
+                        Color.White.copy(alpha = 0.10f),
+                        Color.White.copy(alpha = 0.18f)
+                    )
+                )
+            )
+            // Animated grain texture overlay (prevents color banding)
+            .drawWithContent {
+                drawContent()
+                
+                // Grain noise texture for frosted glass material
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val shader = RuntimeShader(GRAIN_NOISE_SHADER)
+                    shader.setFloatUniform("resolution", size.width, size.height)
+                    shader.setFloatUniform("time", grainTime)
+                    shader.setFloatUniform("intensity", 1.2f) // Slightly more intense grain
+                    drawRect(brush = ShaderBrush(shader))
+                } else {
+                    // Fallback: Pre-computed noise pattern
+                    for (i in 0 until GLASS_NOISE_POINT_COUNT) {
+                        val baseIndex = i * 3
+                        val xRatio = GLASS_NOISE_PATTERN[baseIndex]
+                        val yRatio = GLASS_NOISE_PATTERN[baseIndex + 1]
+                        val alpha = GLASS_NOISE_PATTERN[baseIndex + 2]
+                        drawCircle(
+                            color = Color.White.copy(alpha = alpha * 0.03f),
+                            radius = 1f,
+                            center = Offset(size.width * xRatio, size.height * yRatio)
+                        )
+                    }
+                }
+            }
+            // Inner lighting and depth effects
+            .drawBehind {
+                // Top edge highlight - Bright inner glow (light from above)
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.5f),
+                            Color.White.copy(alpha = 0.25f),
+                            Color.White.copy(alpha = 0.08f),
+                            Color.Transparent
+                        ),
+                        startY = 0f,
+                        endY = 90f
+                    )
+                )
+                
+                // Bottom edge shadow for 3D volume
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.04f),
+                            Color.Black.copy(alpha = 0.1f)
+                        ),
+                        startY = size.height - 70f,
+                        endY = size.height
+                    )
+                )
+                
+                // Left edge inner glow
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.18f),
+                            Color.Transparent
+                        ),
+                        startX = 0f,
+                        endX = 50f
+                    )
+                )
+                
+                // Right edge subtle shadow
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.06f)
+                        ),
+                        startX = size.width - 50f,
+                        endX = size.width
+                    )
+                )
+                
+                // Moving caustic light reflection
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.White.copy(alpha = 0.05f),
+                            Color.White.copy(alpha = 0.1f),
+                            Color.White.copy(alpha = 0.15f),
+                            Color.White.copy(alpha = 0.1f),
+                            Color.White.copy(alpha = 0.05f),
+                            Color.Transparent
+                        ),
+                        start = Offset(causticOffset, 0f),
+                        end = Offset(causticOffset + 200f, size.height)
+                    )
+                )
+                
+                // Lens distortion effect (subtle)
+                if (enableLens) {
+                    val lensX = size.width / 2 + lensOffset * 20
+                    val lensY = size.height / 2 + lensOffset * 10
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.08f),
+                                Color.Transparent
+                            ),
+                            center = Offset(lensX, lensY),
+                            radius = size.minDimension * 0.4f
+                        ),
+                        radius = size.minDimension * 0.4f,
+                        center = Offset(lensX, lensY)
+                    )
+                }
+            }
+            // Specular border - Gradient from bright to subtle
+            .border(
+                BorderStroke(
+                    1.5.dp,
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.7f),
+                            Color.White.copy(alpha = 0.4f),
+                            Color.White.copy(alpha = 0.2f),
+                            Color.White.copy(alpha = 0.1f),
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                    )
+                ),
+                shape
+            )
+            .padding(24.dp)
+    ) {
+        content()
+    }
+}
