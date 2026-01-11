@@ -12,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -20,10 +19,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 
 /**
- * Settings Overlay - Frosted glass panel with app settings
- * Appears on double long-press in Focus Mode
+ * Settings Overlay - Glass Bottom Sheet with app settings
  */
 @Composable
 fun SettingsOverlay(
@@ -34,138 +38,144 @@ fun SettingsOverlay(
     soundEnabled: Boolean,
     onSoundToggle: (Boolean) -> Unit,
     selectedTheme: Int,
-    onThemeSelect: (Int) -> Unit
+    onThemeSelect: (Int) -> Unit,
+    backdrop: Backdrop
 ) {
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(300)) + scaleIn(
-            initialScale = 0.9f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
-        ),
-        exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.9f)
+        enter = slideInVertically { it } + fadeIn(),
+        exit = slideOutVertically { it } + fadeOut()
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.7f))
+                .background(Color.Black.copy(alpha = 0.2f))
                 .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.BottomCenter
         ) {
-            // Settings Card
-            Box(
+            val bottomSheetBackdrop = rememberLayerBackdrop()
+
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.12f),
-                                Color.White.copy(alpha = 0.06f)
-                            )
-                        )
+                    .fillMaxWidth()
+                    .clickable(enabled = false) {}
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { RoundedCornerShape(topStart = 44.dp, topEnd = 44.dp) },
+                        effects = {
+                            vibrancy()
+                            blur(4.dp.toPx())
+                            lens(24.dp.toPx(), 48.dp.toPx(), true)
+                        },
+                        exportedBackdrop = bottomSheetBackdrop,
+                        onDrawSurface = { drawRect(Color.White.copy(alpha = 0.65f)) }
                     )
-                    .border(
-                        1.dp,
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.3f),
-                                Color.White.copy(alpha = 0.1f)
-                            )
-                        ),
-                        RoundedCornerShape(32.dp)
-                    )
-                    .clickable(enabled = false) {} // Prevent click through
                     .padding(24.dp)
+                    .windowInsetsPadding(WindowInsets.navigationBars), // Handle safe area
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Handle indicator
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.Black.copy(alpha = 0.2f))
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Title
+                Text(
+                    text = "EINSTELLUNGEN",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        letterSpacing = 6.sp,
+                        fontWeight = FontWeight.Light
+                    ),
+                    color = Color.Black.copy(alpha = 0.8f)
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Haptic Toggle
+                SettingsToggleRow(
+                    title = "HAPTIK",
+                    subtitle = "Vibrationen bei Interaktion",
+                    checked = hapticEnabled,
+                    onCheckedChange = onHapticToggle,
+                    importedBackdrop = bottomSheetBackdrop
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Sound Toggle
+                SettingsToggleRow(
+                    title = "AMBIENT SOUND",
+                    subtitle = "Generative Klanglandschaft",
+                    checked = soundEnabled,
+                    onCheckedChange = onSoundToggle,
+                    importedBackdrop = bottomSheetBackdrop
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Theme Selection
+                Text(
+                    text = "FARBSCHEMA",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.Black.copy(alpha = 0.6f)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Title
-                    Text(
-                        text = "EINSTELLUNGEN",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            letterSpacing = 6.sp,
-                            fontWeight = FontWeight.Light
-                        ),
-                        color = Color.White.copy(alpha = 0.9f)
+                    ThemeOption(
+                        colors = listOf(Color(0xFF00F0FF), Color(0xFFFF006E)),
+                        selected = selectedTheme == 0,
+                        onClick = { onThemeSelect(0) },
+                        modifier = Modifier.weight(1f)
                     )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Haptic Toggle
-                    SettingsToggleRow(
-                        title = "HAPTIK",
-                        subtitle = "Vibrationen bei Interaktion",
-                        checked = hapticEnabled,
-                        onCheckedChange = onHapticToggle
+                    ThemeOption(
+                        colors = listOf(Color(0xFF7B2FFF), Color(0xFF00FF88)),
+                        selected = selectedTheme == 1,
+                        onClick = { onThemeSelect(1) },
+                        modifier = Modifier.weight(1f)
                     )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Sound Toggle
-                    SettingsToggleRow(
-                        title = "AMBIENT SOUND",
-                        subtitle = "Generative Klanglandschaft",
-                        checked = soundEnabled,
-                        onCheckedChange = onSoundToggle
+                    ThemeOption(
+                        colors = listOf(Color(0xFFFFB347), Color(0xFFFF6B6B)),
+                        selected = selectedTheme == 2,
+                        onClick = { onThemeSelect(2) },
+                        modifier = Modifier.weight(1f)
                     )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Theme Selection
-                    Text(
-                        text = "FARBSCHEMA",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        ThemeOption(
-                            colors = listOf(Color(0xFF00F0FF), Color(0xFFFF006E)),
-                            selected = selectedTheme == 0,
-                            onClick = { onThemeSelect(0) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        ThemeOption(
-                            colors = listOf(Color(0xFF7B2FFF), Color(0xFF00FF88)),
-                            selected = selectedTheme == 1,
-                            onClick = { onThemeSelect(1) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        ThemeOption(
-                            colors = listOf(Color(0xFFFFB347), Color(0xFFFF6B6B)),
-                            selected = selectedTheme == 2,
-                            onClick = { onThemeSelect(2) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        ThemeOption(
-                            colors = listOf(Color(0xFFFFFFFF), Color(0xFF888888)),
-                            selected = selectedTheme == 3,
-                            onClick = { onThemeSelect(3) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Version info
-                    Text(
-                        text = "ChronoTime v1.0",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.3f)
-                    )
-                    Text(
-                        text = "Time in Motion",
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
-                        color = Color.White.copy(alpha = 0.2f)
+                    ThemeOption(
+                        colors = listOf(Color(0xFFFFFFFF), Color(0xFF888888)),
+                        selected = selectedTheme == 3,
+                        onClick = { onThemeSelect(3) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Version info
+                Text(
+                    text = "ChronoTime v1.0",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Black.copy(alpha = 0.4f)
+                )
+                Text(
+                    text = "Time in Motion",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp),
+                    color = Color.Black.copy(alpha = 0.3f)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -176,13 +186,24 @@ private fun SettingsToggleRow(
     title: String,
     subtitle: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    importedBackdrop: Backdrop
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.05f))
+            // Nested glass effect for rows using the sheet's backdrop
+            .drawBackdrop(
+                backdrop = importedBackdrop,
+                shape = { RoundedCornerShape(16.dp) },
+                shadow = null,
+                effects = {
+                    vibrancy()
+                    blur(2.dp.toPx()) // Slightly less blur for inner elements
+                },
+                onDrawSurface = { drawRect(Color.White.copy(alpha = 0.4f)) }
+            )
             .clickable { onCheckedChange(!checked) }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -191,12 +212,12 @@ private fun SettingsToggleRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
-                color = Color.White
+                color = Color.Black.copy(alpha = 0.8f)
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.5f)
+                color = Color.Black.copy(alpha = 0.5f)
             )
         }
 
@@ -210,7 +231,7 @@ private fun SettingsToggleRow(
                     if (checked) Brush.horizontalGradient(
                         listOf(Color(0xFF00F0FF), Color(0xFF00FF88))
                     ) else Brush.horizontalGradient(
-                        listOf(Color(0xFF333333), Color(0xFF444444))
+                        listOf(Color(0xFF555555), Color(0xFF777777))
                     )
                 )
                 .padding(3.dp),
@@ -248,7 +269,7 @@ private fun ThemeOption(
             .then(
                 if (selected) Modifier.border(
                     2.dp,
-                    Color.White,
+                    Color.Black.copy(alpha = 0.5f),
                     RoundedCornerShape(12.dp)
                 ) else Modifier
             )
@@ -377,4 +398,3 @@ fun SwipeHintOverlay(
         }
     }
 }
-

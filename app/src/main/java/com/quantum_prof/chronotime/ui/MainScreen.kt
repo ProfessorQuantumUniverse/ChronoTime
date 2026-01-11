@@ -617,7 +617,8 @@ fun MainScreen() {
                 soundEnabled = soundEnabled,
                 onSoundToggle = { soundEnabled = it },
                 selectedTheme = selectedTheme,
-                onThemeSelect = { selectedTheme = it }
+                onThemeSelect = { selectedTheme = it },
+                backdrop = backdrop // Hinzugefügter Parameter für den Glass-Effekt
             )
         }
     }
