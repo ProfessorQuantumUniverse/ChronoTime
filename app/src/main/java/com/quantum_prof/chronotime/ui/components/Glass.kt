@@ -4,25 +4,21 @@ import android.graphics.RuntimeShader
 import android.os.Build
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
@@ -33,6 +29,7 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.backdrops.layerBackdrop
 
@@ -52,7 +49,7 @@ private const val GLASS_NOISE_POINT_COUNT = 350
  */
 private val GLASS_NOISE_PATTERN: FloatArray by lazy {
     val random = Random(42) // Fixed seed for consistent pattern
-    FloatArray(GLASS_NOISE_POINT_COUNT * 3) { index ->
+    FloatArray(GLASS_NOISE_POINT_COUNT * 3) { _ ->
         random.nextFloat()
     }
 }
@@ -119,202 +116,24 @@ private val GRAIN_NOISE_SHADER: String by lazy {
  */
 @Composable
 fun GlassCard(
+    backdrop: Backdrop,
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape = RoundedCornerShape(32.dp),
-    glowColor: Color = Color(0xFF00F0FF),
-    enableGlow: Boolean = true,
-    content: @Composable () -> Unit
+    content: @Composable BoxScope.() -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "glassGlow")
-
-    // Subtle pulsing glow animation
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.35f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowPulse"
-    )
-
-    // Light reflection movement
-    val reflectionOffset by infiniteTransition.animateFloat(
-        initialValue = -100f,
-        targetValue = 400f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(8000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "reflection"
-    )
-
-    // Breathing scale for organic feel
-    val breathScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.003f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breathScale"
-    )
-    
-    // Animated grain time for AGSL shader
-    val grainTime by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 100f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(10000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "grainTime"
-    )
-
-    BoxWithConstraints(
+    val cardBackdrop = rememberLayerBackdrop()
+    Box(
         modifier = modifier
-            // Scale breathing effect
-            .graphicsLayer {
-                scaleX = breathScale
-                scaleY = breathScale
-            }
-            // NOTE: No blur is applied to this composable.
-            // Content (text, clocks) must remain sharp and readable.
-            // The glassmorphism effect comes from semi-transparency and
-            // grain texture - NOT blur. Background elements show through
-            // the translucent surface.
-            
-            // Outer glow (ambient shadow) - enhanced depth
-            .shadow(
-                elevation = 32.dp,
-                shape = shape,
-                spotColor = if (enableGlow) glowColor.copy(alpha = glowAlpha) else Color.Black.copy(alpha = 0.4f),
-                ambientColor = if (enableGlow) glowColor.copy(alpha = glowAlpha * 0.5f) else Color.Black.copy(alpha = 0.15f)
-            )
-            .clip(shape)
-            // Multi-layer glass effect with depth - Enhanced opacity gradient
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.22f),
-                        Color.White.copy(alpha = 0.12f),
-                        Color.White.copy(alpha = 0.08f),
-                        Color.White.copy(alpha = 0.14f)
-                    )
-                )
-            )
-            // Animated grain noise texture overlay (AGSL on Android 13+, fallback on older)
-            .drawWithContent {
-                drawContent()
-                
-                // Use AGSL shader for animated grain on Android 13+
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    val shader = RuntimeShader(GRAIN_NOISE_SHADER)
-                    shader.setFloatUniform("resolution", size.width, size.height)
-                    shader.setFloatUniform("time", grainTime)
-                    shader.setFloatUniform("intensity", 1.0f)
-                    drawRect(brush = ShaderBrush(shader))
-                } else {
-                    // Fallback: Pre-computed noise pattern with higher density
-                    for (i in 0 until GLASS_NOISE_POINT_COUNT) {
-                        val baseIndex = i * 3
-                        val xRatio = GLASS_NOISE_PATTERN[baseIndex]
-                        val yRatio = GLASS_NOISE_PATTERN[baseIndex + 1]
-                        val alpha = GLASS_NOISE_PATTERN[baseIndex + 2]
-                        drawCircle(
-                            color = Color.White.copy(alpha = alpha * 0.025f),
-                            radius = 0.8f,
-                            center = Offset(size.width * xRatio, size.height * yRatio)
-                        )
-                    }
-                }
-            }
-            // Inner shadow and reflections for depth - Enhanced 3D volume
-            .drawBehind {
-                // Top edge highlight - Inner white glow (simulates light from above)
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.45f),
-                            Color.White.copy(alpha = 0.2f),
-                            Color.White.copy(alpha = 0.05f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = 80f
-                    )
-                )
-
-                // Bottom edge subtle shadow (inner) - Creates 3D depth
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.03f),
-                            Color.Black.copy(alpha = 0.08f)
-                        ),
-                        startY = size.height - 60f,
-                        endY = size.height
-                    )
-                )
-                
-                // Left edge inner glow (simulates light from top-left)
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        startX = 0f,
-                        endX = 40f
-                    )
-                )
-                
-                // Right edge inner shadow
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.05f)
-                        ),
-                        startX = size.width - 40f,
-                        endX = size.width
-                    )
-                )
-
-                // Moving light reflection (caustic effect) - Enhanced
-                drawRect(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.White.copy(alpha = 0.06f),
-                            Color.White.copy(alpha = 0.12f),
-                            Color.White.copy(alpha = 0.18f),
-                            Color.White.copy(alpha = 0.12f),
-                            Color.White.copy(alpha = 0.06f),
-                            Color.Transparent
-                        ),
-                        start = Offset(reflectionOffset, 0f),
-                        end = Offset(reflectionOffset + 180f, size.height)
-                    )
-                )
-            }
-            // Specular border - Gradient from White to Transparent (light hitting top-left)
-            .border(
-                BorderStroke(
-                    1.dp,
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.6f),  // Top-left - brightest (light source)
-                            Color.White.copy(alpha = 0.35f),
-                            Color.White.copy(alpha = 0.15f),
-                            Color.White.copy(alpha = 0.08f),  // Bottom-right - darkest
-                        ),
-                        start = Offset(0f, 0f),
-                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                    )
-                ),
-                shape
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(4f.dp.toPx())
+                    lens(24f.dp.toPx(), 48f.dp.toPx(), true)
+                },
+                exportedBackdrop = cardBackdrop,
+                onDrawSurface = { drawRect(Color.White.copy(alpha = 0.5f)) }
             )
             .padding(24.dp)
     ) {
@@ -327,18 +146,22 @@ fun GlassCard(
  */
 @Composable
 fun MinimalGlassCard(
+    backdrop: Backdrop,
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape = RoundedCornerShape(24.dp),
-    content: @Composable () -> Unit
+    content: @Composable BoxScope.() -> Unit
 ) {
     Box(
         modifier = modifier
-            .shadow(elevation = 4.dp, shape = shape, spotColor = Color.Black.copy(alpha = 0.2f))
-            .clip(shape)
-            .background(Color.Black.copy(alpha = 0.3f))
-            .border(
-                BorderStroke(0.5.dp, Color.White.copy(alpha = 0.1f)),
-                shape
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(4f.dp.toPx())
+                    lens(24f.dp.toPx(), 48f.dp.toPx(), true)
+                },
+                onDrawSurface = { drawRect(Color.Black.copy(alpha = 0.3f)) }
             )
             .padding(16.dp)
     ) {
@@ -352,10 +175,11 @@ fun MinimalGlassCard(
  */
 @Composable
 fun NeonGlassCard(
+    backdrop: Backdrop,
     modifier: Modifier = Modifier,
     neonColor: Color = Color(0xFF00FF88),
     shape: RoundedCornerShape = RoundedCornerShape(28.dp),
-    content: @Composable () -> Unit
+    content: @Composable BoxScope.() -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "neonPulse")
 
@@ -369,99 +193,24 @@ fun NeonGlassCard(
         label = "scale"
     )
 
-    val glowIntensity by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glow"
-    )
-    
-    // Animated grain for texture
-    val grainTime by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 100f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(10000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "grainTime"
-    )
-
     Box(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = pulseScale
-                scaleY = pulseScale
-            }
-            .shadow(
-                elevation = 35.dp,
-                shape = shape,
-                spotColor = neonColor.copy(alpha = glowIntensity),
-                ambientColor = neonColor.copy(alpha = glowIntensity * 0.4f)
-            )
-            .clip(shape)
-            .background(Color.Black.copy(alpha = 0.75f))
-            // Add grain noise texture
-            .drawWithContent {
-                drawContent()
-                // Subtle grain for texture
-                for (i in 0 until GLASS_NOISE_POINT_COUNT / 2) {
-                    val baseIndex = i * 3
-                    val xRatio = GLASS_NOISE_PATTERN[baseIndex]
-                    val yRatio = GLASS_NOISE_PATTERN[baseIndex + 1]
-                    val alpha = GLASS_NOISE_PATTERN[baseIndex + 2]
-                    drawCircle(
-                        color = neonColor.copy(alpha = alpha * 0.015f),
-                        radius = 0.6f,
-                        center = Offset(size.width * xRatio, size.height * yRatio)
-                    )
+            .scale(pulseScale)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { shape },
+                effects = {
+                    vibrancy()
+                    blur(8.dp.toPx())
+                    lens(32.dp.toPx(), 64.dp.toPx(), true)
+                },
+                onDrawSurface = {
+                    drawRect(neonColor.copy(alpha = 0.1f))
+                    drawRect(Color.White.copy(alpha = 0.2f))
                 }
-            }
-            // Inner glow effects
-            .drawBehind {
-                // Top inner glow
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            neonColor.copy(alpha = 0.15f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = 50f
-                    )
-                )
-                // Bottom inner shadow
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.2f)
-                        ),
-                        startY = size.height - 40f,
-                        endY = size.height
-                    )
-                )
-            }
-            .border(
-                BorderStroke(
-                    2.dp,
-                    Brush.linearGradient(
-                        colors = listOf(
-                            neonColor.copy(alpha = 0.9f),
-                            neonColor.copy(alpha = 0.5f),
-                            neonColor.copy(alpha = 0.3f),
-                            neonColor.copy(alpha = 0.6f)
-                        ),
-                        start = Offset(0f, 0f),
-                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                    )
-                ),
-                shape
             )
-            .padding(20.dp)
+            .border(2.dp, neonColor.copy(alpha = 0.5f), shape)
+            .padding(24.dp)
     ) {
         content()
     }
@@ -563,12 +312,13 @@ fun LiquidGlassCard(
                 shape = { shape },
                 effects = {
                     vibrancy()
-                    blur(12f.dp.toPx()) // Liquid glass blur radius
+                    blur(4f.dp.toPx())
+                    lens(24f.dp.toPx(), 48f.dp.toPx(), true)
                 },
-                onDrawSurface = {
+                /*onDrawSurface = {
                     // Semi-transparent glass surface
                     drawRect(Color.White.copy(alpha = 0.15f))
-                }
+                } */
             )
             // Animated grain noise texture overlay
             .drawWithContent {
@@ -596,7 +346,7 @@ fun LiquidGlassCard(
                     }
                 }
             }
-            // Inner shadow and reflections for depth
+            /* Inner shadow and reflections for depth
             .drawBehind {
                 // Top edge highlight - Inner white glow
                 drawRect(
@@ -612,7 +362,7 @@ fun LiquidGlassCard(
                     )
                 )
                 
-                // Bottom edge subtle shadow
+                /* Bottom edge subtle shadow
                 drawRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(
@@ -625,7 +375,7 @@ fun LiquidGlassCard(
                     )
                 )
                 
-                // Moving light reflection (caustic effect)
+                / Moving light reflection (caustic effect)
                 drawRect(
                     brush = Brush.linearGradient(
                         colors = listOf(
@@ -640,12 +390,12 @@ fun LiquidGlassCard(
                         start = Offset(reflectionOffset, 0f),
                         end = Offset(reflectionOffset + 180f, size.height)
                     )
-                )
-            }
-            // Specular border
+                ) */
+            } */
+            /* Specular border
             .border(
                 BorderStroke(
-                    1.dp,
+                    0.dp,
                     Brush.linearGradient(
                         colors = listOf(
                             Color.White.copy(alpha = 0.6f),
@@ -658,7 +408,7 @@ fun LiquidGlassCard(
                     )
                 ),
                 shape
-            )
+            ) */
             .padding(24.dp),
         content = content
     )
@@ -708,5 +458,3 @@ fun LiquidGlassScaffold(
         content(backdrop)
     }
 }
-
-

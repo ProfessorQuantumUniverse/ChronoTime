@@ -11,9 +11,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -35,22 +33,23 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.annotation.SuppressLint
 import java.util.Locale
 import kotlin.math.abs
 
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
 import com.quantum_prof.chronotime.ui.components.*
 import com.quantum_prof.chronotime.ui.utils.rememberTilt
 import com.quantum_prof.chronotime.ui.theme.DeepBackground
 import java.util.Calendar
+import com.kyant.backdrop.Backdrop
 
 /**
  * FLUX: Open Chronology - Time in Motion
@@ -290,6 +289,8 @@ fun MainScreen() {
                 }
                 // Note: Horizontal drag handling moved to per-page level for independent clock configs
         ) {
+            val backdrop = rememberLayerBackdrop()
+            Box(Modifier.fillMaxSize().layerBackdrop(backdrop)) {
             // === LAYER 1: BACKGROUND ===
             // Dynamic mesh gradient background
             if (!leetMode) {
@@ -369,6 +370,7 @@ fun MainScreen() {
                     tiltY = tilt.pitch
                 )
             }
+            } // End of backdrop capture Box
 
             // === LAYER 4: CLOCK INTERFACES (Vertical Pager - TikTok style with snap fling) ===
             // Enhanced pager with premium snap fling behavior - STICKY/ELASTIC physics
@@ -398,7 +400,6 @@ fun MainScreen() {
                 val pageConfig = getClockConfig(page)
                 
                 // Calculate elastic stretch factor - page stretches slightly before snapping
-                val stretchFactor = 1f + (abs(pageOffset) * 0.08f) // Subtle stretch
                 val elasticScale = if (pageOffset != 0f) {
                     1f - (abs(pageOffset) * 0.12f) // Shrink as it moves away
                 } else {
@@ -449,37 +450,29 @@ fun MainScreen() {
                             config = pageConfig,
                             tiltX = tilt.roll,
                             tiltY = tilt.pitch,
-                            leetMode = leetMode,
-                            scaleFactor = scaleFactor
+                            scaleFactor = scaleFactor,
+                            backdrop = backdrop
                         )
                     }
 
-                    // Different card styles for different clocks
-                    when (page) {
-                        5 -> { // Unix - Terminal style
-                            NeonGlassCard(
-                                modifier = Modifier.offset(x = -parallaxX / 2, y = -parallaxY / 2),
-                                neonColor = Color.Green
-                            ) { glassContent() }
-                        }
-                        4 -> { // Swatch - Retro style
-                            NeonGlassCard(
-                                modifier = Modifier.offset(x = -parallaxX / 2, y = -parallaxY / 2),
-                                neonColor = Color(0xFF00F260)
-                            ) { glassContent() }
-                        }
-                        else -> {
-                            GlassCard(
-                                modifier = Modifier.offset(x = -parallaxX / 2, y = -parallaxY / 2),
-                                glowColor = animatedPrimaryColor
-                            ) { glassContent() }
-                        }
+                    // Unified Liquid Glass Card for all clocks
+                    val glowColor = when (page) {
+                        5 -> Color.Green // Unix
+                        4 -> Color(0xFF00F260) // Swatch
+                        else -> Color(0xFF00F0FF) // Default cyan
                     }
+
+                    LiquidGlassCard(
+                        backdrop = backdrop,
+                        modifier = Modifier.offset(x = -parallaxX / 2, y = -parallaxY / 2),
+                        glowColor = glowColor,
+                        enableGlow = true
+                    ) { glassContent() }
                 }
             }
             
             // === LAYER 4.5: FOREGROUND PARTICLES (pass in front of glass - sharp, fast) ===
-            if (!leetMode && !focusMode) {
+            /*if (!leetMode && !focusMode) {
                 ForegroundParticleField(
                     modifier = Modifier
                         .fillMaxSize()
@@ -488,7 +481,7 @@ fun MainScreen() {
                     particleCount = 10,
                     baseColor = animatedPrimaryColor
                 )
-            }
+            } */
 
             // === LAYER 5: UI OVERLAYS (Hidden in Focus Mode) ===
 
@@ -668,8 +661,8 @@ private fun ClockContent(
     config: Int,
     tiltX: Float,
     tiltY: Float,
-    leetMode: Boolean,
-    scaleFactor: Float = 1f
+    scaleFactor: Float = 1f,
+    backdrop: Backdrop
 ) {
     // Wrap content in a responsive container
     Box(
@@ -681,7 +674,7 @@ private fun ClockContent(
     ) {
         when (page) {
             0 -> ModernTime(time, config, scaleFactor)
-            1 -> HexClock(time)
+            1 -> HexClock(time, backdrop)
             2 -> BerlinClock(time)
             3 -> BinaryClock(time)
             4 -> SwatchBeatClock(time)

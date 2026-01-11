@@ -1,5 +1,7 @@
 package com.quantum_prof.chronotime.ui.components
 
+import android.R.attr.typeface
+import android.annotation.SuppressLint
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -65,7 +67,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.Font
+import com.quantum_prof.chronotime.R
 import com.quantum_prof.chronotime.ui.utils.AutoScalingText
+import androidx.core.content.res.ResourcesCompat.getFont
+import com.kyant.backdrop.Backdrop
+import kotlin.shr
+import kotlin.toString
+import android.R.attr.padding
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 
 // --- Components ---
 
@@ -74,45 +85,53 @@ import com.quantum_prof.chronotime.ui.utils.AutoScalingText
  * RESPONSIVE: Uses AutoScalingText to ensure hex code fits on one line
  * on all screen sizes from Galaxy Z Flip outer screen to tablets.
  */
+@SuppressLint("ConfigurationScreenWidthHeight")
 @Composable
-fun HexClock(time: Calendar) {
+fun HexClock(time: Calendar,
+             backdrop: Backdrop
+) {
     val r = time.get(Calendar.HOUR_OF_DAY)
     val g = time.get(Calendar.MINUTE)
     val b = time.get(Calendar.SECOND)
 
-    val hexString = String.format("#%02X%02X%02X", r, g, b)
+    val hexString = String.format("#%02d%02d%02d", r, g, b)
+
+    val bgColor = try {
+        Color(android.graphics.Color.parseColor(hexString))
+    } catch (e: Exception) {
+        Color.Black
+    }
     
     // Get screen width for responsive sizing
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
     val isCompactScreen = screenWidth < 360.dp
+    val exoFontFamily = FontFamily(Font(R.font.exo2_bold))
+
 
     Column(
+        modifier = Modifier
+            .fillMaxWidth(0.8f)
+            .wrapContentHeight(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier.fillMaxWidth()
+        verticalArrangement = Arrangement.Center
     ) {
-        // AutoScalingText ensures the hex code NEVER wraps to a second line
-        AutoScalingText(
-            text = hexString,
-            modifier = Modifier.fillMaxWidth(0.9f),
-            style = MaterialTheme.typography.displayLarge.copy(
-                fontFamily = FontFamily.Monospace,
-                shadow = androidx.compose.ui.graphics.Shadow(
-                    color = Color.Black.copy(alpha = 0.5f),
-                    blurRadius = 10f
-                )
-            ),
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
-            maxFontSize = if (isCompactScreen) 48.sp else 80.sp,
-            minFontSize = 16.sp,
-            scalingFactor = 0.12f,
-            textAlign = TextAlign.Center
-        )
+
+            AutoScalingText(
+                text = hexString,
+                modifier = Modifier.wrapContentWidth(),
+                style = MaterialTheme.typography.displayLarge,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontFamily = exoFontFamily,
+                maxFontSize = if (isCompactScreen) 40.sp else 60.sp,
+                minFontSize = 16.sp,
+                scalingFactor = 0.12f,
+                textAlign = TextAlign.Right // Properly centers text glyphs within the bounds
+            )
+
+        }
     }
-}
 
 /**
  * BerlinClock - The famous Berlin Mengenlehreuhr
@@ -214,6 +233,9 @@ fun BerlinClock(time: Calendar) {
     // Apply overall scale for very small screens
     Column(
         modifier = Modifier
+            // FIX: Begrenze die Breite, damit die GlassCard im MainScreen Ränder hat
+            // Berlin Uhr braucht etwas mehr Platz als Text, daher 0.9f / 0.8f
+            .fillMaxWidth(if (isCompactScreen) 0.95f else 0.85f)
             .padding(padding)
             .scale(scaleFactor),
         verticalArrangement = Arrangement.spacedBy(rowSpacing),
@@ -377,6 +399,11 @@ fun BerlinLamp(
  * RESPONSIVE: On small screens (< 360dp), reduces gap between dots from 16dp to 4dp.
  * The entire layout scales down based on screen width using Modifier.scale().
  */
+/**
+ * BinaryClock - Displays time as binary numbers
+ * FIXED: Uses weights for even columns and fixed aspect ratios to prevent jitter/squishing.
+ * Removed general scaling in favor of responsive layout constraints.
+ */
 @Composable
 fun BinaryClock(time: Calendar) {
     val h = time.get(Calendar.HOUR_OF_DAY)
@@ -384,186 +411,134 @@ fun BinaryClock(time: Calendar) {
     val s = time.get(Calendar.SECOND)
 
     var showCheat by remember { mutableStateOf<Int?>(null) } // Index of column clicked
-    
+
     // Responsive design
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
     val isCompactScreen = screenWidth < 360.dp
-    
-    // Responsive spacing - reduced on small screens
-    val columnSpacing = if (isCompactScreen) 4.dp else 16.dp
-    val dotSpacing = if (isCompactScreen) 6.dp else 12.dp
+
+    // Variables defined for layout logic
+    val padding = if (isCompactScreen) 8.dp else 16.dp
+    val dotSpacing = if (isCompactScreen) 4.dp else 8.dp
     val separatorWidth = if (isCompactScreen) 8.dp else 16.dp
-    
-    // Scale factor for entire binary clock based on screen width
-    val scaleFactor = when {
-        screenWidth < 280.dp -> 0.65f  // Galaxy Z Flip outer screen
-        screenWidth < 320.dp -> 0.75f
-        screenWidth < 360.dp -> 0.85f
-        else -> 1f
-    }
 
     // Columns: H1 (2 bits), H2 (4 bits), M1 (3 bits), M2 (4 bits), S1 (3 bits), S2 (4 bits)
     val digits = listOf(h / 10, h % 10, m / 10, m % 10, s / 10, s % 10)
     val bitCounts = listOf(2, 4, 3, 4, 3, 4)
 
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(columnSpacing),
-        verticalAlignment = Alignment.Bottom,
-        modifier = Modifier.scale(scaleFactor)
+    // Outer Container controlling the max width relative to parent (LiquidGlass)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth(if (isCompactScreen) 0.98f else 0.9f) // Slight inset, not edge-to-edge
+            .padding(vertical = padding),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        digits.forEachIndexed { index, digit ->
-            Column(
-                verticalArrangement = Arrangement.spacedBy(dotSpacing),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable {
-                   showCheat = if (showCheat == index) null else index
-                }
-            ) {
-                // Cheating Mode (Dezimalzahl)
-                AnimatedVisibility(visible = showCheat == index) {
-                     Text(
-                        text = digit.toString(),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White
-                    )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            // Ensure columns are spaced appropriately, but weights inside columns handle the rest
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            digits.forEachIndexed { index, digit ->
+                // Use Weight to treat all digit columns equally -> Fixes unequal dot sizes
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { showCheat = if (showCheat == index) null else index },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(dotSpacing)
+                ) {
+                    // Cheat Text (Decimal Number)
+                    AnimatedVisibility(visible = showCheat == index) {
+                        Text(
+                            text = digit.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Render Bits
+                    for (bit in (bitCounts[index] - 1) downTo 0) {
+                        val isActive = ((digit shr bit) and 1) == 1
+
+                        // Wrapper Box maintaining Aspect Ratio -> Fixes Oval Dots
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f), // Forces Square -> Circle
+                            contentAlignment = Alignment.Center
+                        ) {
+                            GlowingOrb(isActive = isActive, isCompact = isCompactScreen)
+                        }
+                    }
                 }
 
-                for (bit in (bitCounts[index] - 1) downTo 0) {
-                    val isActive = ((digit shr bit) and 1) == 1
-                    GlowingOrb(isActive = isActive, isCompact = isCompactScreen)
+                // Fixed Width Separators between HH-MM and MM-SS
+                if (index == 1 || index == 3) {
+                    Spacer(modifier = Modifier.width(separatorWidth))
+                } else if (index < 5) {
+                    // Small spacer between digits of same unit
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
-            }
-            if (index == 1 || index == 3) {
-                 Spacer(modifier = Modifier.width(separatorWidth))
             }
         }
     }
 }
 
 /**
- * Enhanced Binary Dot as "Glowing Orb" with radial gradients and blur bloom
- * RESPONSIVE: Supports compact mode with smaller orb size
- * @param isActive Whether the orb is lit
- * @param isCompact Whether to use compact sizing for small screens
+ * A stable Glowing Orb that does not change layout size based on state
  */
 @Composable
 fun GlowingOrb(isActive: Boolean, isCompact: Boolean = false) {
-    val orbColor = Color(0xFF00E5FF)
-    
-    // Responsive base size
-    val baseSize = if (isCompact) 28.dp else 40.dp
-    val bloomSize = if (isCompact) 35.dp else 50.dp
-    val coreSize = if (isCompact) 24.dp else 36.dp
-    val glowElevation = if (isCompact) 14.dp else 20.dp
-    val blurRadius = if (isCompact) 5.dp else 8.dp
-    
-    val color by animateColorAsState(
-        targetValue = if (isActive) orbColor else orbColor.copy(alpha = 0.08f),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+    val activeColor = Color(0xFF00F0FF)
+    val inactiveColor = Color(0xFF1A1A2E)
+
+    val animatedColor by animateColorAsState(
+        targetValue = if (isActive) activeColor else inactiveColor,
+        animationSpec = tween(300),
         label = "color"
     )
-    
-    val scale by animateFloatAsState(
-        targetValue = if (isActive) 1.2f else 0.8f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "scale"
-    )
-    
+
     val glowAlpha by animateFloatAsState(
-        targetValue = if (isActive) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "glowAlpha"
+        targetValue = if (isActive) 0.6f else 0f,
+        label = "glow"
     )
 
+    // Inner Dot Size relative to the Box container
+    // We strictly layout the shadow INSIDE this box to prevent jitter
     Box(
-        modifier = Modifier
-            .size(baseSize * scale)
-            // Outer bloom glow
-            .shadow(
-                elevation = if (isActive) glowElevation else 0.dp,
-                shape = CircleShape,
-                spotColor = orbColor.copy(alpha = 0.8f * glowAlpha),
-                ambientColor = orbColor.copy(alpha = 0.5f * glowAlpha)
-            ),
+        modifier = Modifier.fillMaxSize(0.85f), // Leave room for shadow
         contentAlignment = Alignment.Center
     ) {
-        // Bloom blur layer (background glow)
-        if (isActive) {
-            Canvas(
-                modifier = Modifier
-                    .size(bloomSize * scale)
-                    .blur(blurRadius)
-            ) {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            orbColor.copy(alpha = 0.8f),
-                            orbColor.copy(alpha = 0.4f),
-                            Color.Transparent
-                        )
-                    ),
-                    radius = size.minDimension / 2
+        // Shadow (Glow) Layer
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .scale(if (isActive) 1f else 0.8f) // Scale shadow only inside allocated space
+                .shadow(
+                    elevation = if (isActive) 15.dp else 0.dp,
+                    shape = CircleShape,
+                    spotColor = activeColor.copy(alpha = glowAlpha),
+                    ambientColor = activeColor.copy(alpha = glowAlpha * 0.5f)
                 )
-            }
-        }
-        
-        // Core orb with radial gradient
-        Canvas(
-            modifier = Modifier.size(coreSize * scale)
-        ) {
-            // Outer glow ring
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        color.copy(alpha = 0.6f * glowAlpha),
-                        color.copy(alpha = 0.3f * glowAlpha),
-                        Color.Transparent
-                    )
-                ),
-                radius = size.minDimension / 2 * 1.5f
-            )
-            
-            // Main orb body
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = if (isActive) listOf(
-                        Color.White.copy(alpha = 0.9f),
-                        orbColor,
-                        orbColor.copy(alpha = 0.7f)
-                    ) else listOf(
-                        color.copy(alpha = 0.3f),
-                        color.copy(alpha = 0.1f)
-                    )
-                ),
-                radius = size.minDimension / 2
-            )
-            
-            // Inner bright core
-            if (isActive) {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.White,
-                            Color.White.copy(alpha = 0.5f),
-                            Color.Transparent
-                        )
-                    ),
-                    radius = size.minDimension / 4
+        )
+
+        // The actual Dot
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(animatedColor, CircleShape)
+                .border(
+                    width = 1.dp,
+                    color = if (isActive) Color.White.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.1f),
+                    shape = CircleShape
                 )
-            }
-        }
+        )
     }
 }
+
+
 
 // Keep old BinaryDot for backward compatibility
 @Composable

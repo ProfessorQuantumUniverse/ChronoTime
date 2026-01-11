@@ -61,7 +61,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.kyant.backdrop)
+    implementation("io.github.kyant0:backdrop:1.0.4")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
