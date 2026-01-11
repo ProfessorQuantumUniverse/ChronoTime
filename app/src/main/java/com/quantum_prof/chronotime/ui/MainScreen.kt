@@ -206,13 +206,30 @@ fun MainScreen() {
     }
     
     // Scroll progress haptic (light clicks during scroll for gear feel)
+    // Uses threshold crossing detection to avoid excessive vibration
+    var lastHapticThreshold by remember { mutableStateOf(0f) }
     LaunchedEffect(pagerState, hapticEnabled) {
         snapshotFlow { pagerState.currentPageOffsetFraction }.collect { offset ->
-            // Trigger light haptic at certain scroll thresholds
-            if (hapticEnabled && abs(offset) > 0.1f && abs(offset) < 0.2f) {
+            val absOffset = abs(offset)
+            // Define threshold points for gear-like haptic feedback
+            val thresholdPoints = listOf(0.15f, 0.35f, 0.55f, 0.75f)
+            
+            // Find which threshold we've crossed
+            val currentThreshold = thresholdPoints.find { threshold ->
+                absOffset >= threshold - 0.05f && absOffset <= threshold + 0.05f
+            }
+            
+            // Only trigger haptic when crossing a new threshold
+            if (hapticEnabled && currentThreshold != null && currentThreshold != lastHapticThreshold) {
+                lastHapticThreshold = currentThreshold
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
                 }
+            }
+            
+            // Reset threshold when scroll completes
+            if (absOffset < 0.05f) {
+                lastHapticThreshold = 0f
             }
         }
     }

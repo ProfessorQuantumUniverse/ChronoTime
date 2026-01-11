@@ -96,8 +96,10 @@ fun BerlinClock(time: Calendar) {
     val seconds = time.get(Calendar.SECOND)
 
     // Track previous 5-hour count for thud animation
+    // Use -1 as sentinel value to avoid triggering on initial render
     val current5HourCount = hours / 5
-    var previous5HourCount by remember { mutableStateOf(current5HourCount) }
+    var previous5HourCount by remember { mutableStateOf(-1) }
+    var isInitialized by remember { mutableStateOf(false) }
     
     // Thud animation scale
     val thudScale = remember { Animatable(1f) }
@@ -112,8 +114,15 @@ fun BerlinClock(time: Calendar) {
         context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     }
 
-    // Thud animation when 5-hour block fills
+    // Thud animation when 5-hour block fills (only after initial render)
     LaunchedEffect(current5HourCount) {
+        if (!isInitialized) {
+            // First render - just set the initial state
+            previous5HourCount = current5HourCount
+            isInitialized = true
+            return@LaunchedEffect
+        }
+        
         if (current5HourCount != previous5HourCount && current5HourCount > 0) {
             // Trigger thud animation
             thudScale.animateTo(

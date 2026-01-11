@@ -192,29 +192,30 @@ fun FluidHourglass(
     val totalSeconds = hour * 3600 + minute * 60 + second
     val dayProgress = totalSeconds / 86400f
 
-    // Physics-based tilt simulation with spring animation
-    val animatedTiltX by animateFloatAsState(
-        targetValue = tiltX,
-        animationSpec = spring(
+    // Cached spring animation spec for tilt (avoids recreation on recomposition)
+    val tiltSpringSpec = remember {
+        spring<Float>(
             dampingRatio = Spring.DampingRatioLowBouncy,
             stiffness = Spring.StiffnessLow
-        ),
+        )
+    }
+    
+    // Physics-based tilt simulation with cached spring animation
+    val animatedTiltX by animateFloatAsState(
+        targetValue = tiltX,
+        animationSpec = tiltSpringSpec,
         label = "tiltX"
     )
     
     val animatedTiltY by animateFloatAsState(
         targetValue = tiltY,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        animationSpec = tiltSpringSpec,
         label = "tiltY"
     )
 
     // Calculate tilt influence on fluid surface angle
     val tiltInfluence = (animatedTiltX * 50).coerceIn(-60f, 60f)
-    val surfaceTiltAngle = animatedTiltX * 15f // Degrees of surface tilt
-
+    
     // Fluid wave animation
     val infiniteTransition = rememberInfiniteTransition(label = "fluid")
     val waveOffset by infiniteTransition.animateFloat(

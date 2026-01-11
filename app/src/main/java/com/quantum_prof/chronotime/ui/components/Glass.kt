@@ -36,6 +36,25 @@ import com.quantum_prof.chronotime.ui.theme.GlassWhite
 import kotlin.random.Random
 
 /**
+ * Number of noise points for the glass texture effect.
+ * 200 points provides a good balance between visual density and performance.
+ * Fewer points would look too sparse, while more would impact rendering performance.
+ */
+private const val GLASS_NOISE_POINT_COUNT = 200
+
+/**
+ * Pre-computed noise pattern for glass texture using FloatArray for memory efficiency.
+ * Each point is stored as 3 consecutive floats: xRatio, yRatio, alpha.
+ * Total size: 200 * 3 = 600 floats
+ */
+private val GLASS_NOISE_PATTERN: FloatArray by lazy {
+    val random = Random(42) // Fixed seed for consistent pattern
+    FloatArray(GLASS_NOISE_POINT_COUNT * 3) { index ->
+        random.nextFloat()
+    }
+}
+
+/**
  * Enhanced Deep Glass Card with Superellipse shape, RenderEffect blur, 
  * white noise texture overlay, and advanced "Frosted Glass" effects
  * for the "Deep Glass" aesthetic.
@@ -84,9 +103,6 @@ fun GlassCard(
         label = "breathScale"
     )
 
-    // Pre-generate noise pattern for performance
-    val noisePattern = remember { generateNoisePattern() }
-
     BoxWithConstraints(
         modifier = modifier
             // Scale breathing effect
@@ -129,11 +145,15 @@ fun GlassCard(
                     )
                 )
             )
-            // White noise texture overlay for glass grain
+            // White noise texture overlay for glass grain (using pre-computed pattern)
             .drawWithContent {
                 drawContent()
-                // Draw subtle noise texture
-                noisePattern.forEach { (xRatio, yRatio, alpha) ->
+                // Draw subtle noise texture from pre-computed FloatArray
+                for (i in 0 until GLASS_NOISE_POINT_COUNT) {
+                    val baseIndex = i * 3
+                    val xRatio = GLASS_NOISE_PATTERN[baseIndex]
+                    val yRatio = GLASS_NOISE_PATTERN[baseIndex + 1]
+                    val alpha = GLASS_NOISE_PATTERN[baseIndex + 2]
                     drawCircle(
                         color = Color.White.copy(alpha = alpha * 0.015f),
                         radius = 0.5f,
@@ -201,20 +221,6 @@ fun GlassCard(
             .padding(24.dp)
     ) {
         content()
-    }
-}
-
-/**
- * Generate a pre-computed noise pattern for glass texture
- */
-private fun generateNoisePattern(): List<Triple<Float, Float, Float>> {
-    val random = Random(42) // Fixed seed for consistent pattern
-    return List(200) {
-        Triple(
-            random.nextFloat(),
-            random.nextFloat(),
-            random.nextFloat()
-        )
     }
 }
 

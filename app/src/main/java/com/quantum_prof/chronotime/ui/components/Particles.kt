@@ -23,8 +23,10 @@ import kotlin.random.Random
 /**
  * AGSL Shader source for animated mesh gradient background
  * Creates a living, pulsating gradient that responds to time
+ * Lazy initialized to avoid allocation on class load
  */
-private val MESH_GRADIENT_SHADER = """
+private val MESH_GRADIENT_SHADER: String by lazy {
+    """
     uniform float2 resolution;
     uniform float time;
     uniform float3 color1;
@@ -97,7 +99,8 @@ private val MESH_GRADIENT_SHADER = """
         
         return half4(color, 1.0);
     }
-""".trimIndent()
+    """.trimIndent()
+}
 
 /**
  * Mid-Layer Floating Particles that visualize time
