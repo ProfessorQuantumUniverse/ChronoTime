@@ -6,9 +6,8 @@ plugins {
 
 android {
     namespace = "com.quantum_prof.chronotime"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
+
 
     defaultConfig {
         applicationId = "com.quantum_prof.chronotime"
