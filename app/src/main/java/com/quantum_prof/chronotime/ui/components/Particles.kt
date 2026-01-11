@@ -1,5 +1,7 @@
 package com.quantum_prof.chronotime.ui.components
 
+import android.graphics.RuntimeShader
+import android.os.Build
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.IntSize
@@ -16,6 +19,88 @@ import kotlinx.coroutines.delay
 import java.util.Calendar
 import kotlin.math.*
 import kotlin.random.Random
+
+/**
+ * AGSL Shader source for animated mesh gradient background
+ * Creates a living, pulsating gradient that responds to time
+ * Lazy initialized to avoid allocation on class load
+ */
+private val MESH_GRADIENT_SHADER: String by lazy {
+    """
+    uniform float2 resolution;
+    uniform float time;
+    uniform float3 color1;
+    uniform float3 color2;
+    uniform float3 color3;
+    uniform float breathScale;
+    
+    // Simplex noise helper functions
+    float3 mod289(float3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    float2 mod289(float2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    float3 permute(float3 x) { return mod289(((x * 34.0) + 1.0) * x); }
+    
+    float snoise(float2 v) {
+        const float4 C = float4(0.211324865405187, 0.366025403784439,
+                               -0.577350269189626, 0.024390243902439);
+        float2 i  = floor(v + dot(v, C.yy));
+        float2 x0 = v -   i + dot(i, C.xx);
+        float2 i1;
+        i1 = (x0.x > x0.y) ? float2(1.0, 0.0) : float2(0.0, 1.0);
+        float4 x12 = x0.xyxy + C.xxzz;
+        x12.xy -= i1;
+        i = mod289(i);
+        float3 p = permute(permute(i.y + float3(0.0, i1.y, 1.0)) + i.x + float3(0.0, i1.x, 1.0));
+        float3 m = max(0.5 - float3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+        m = m * m;
+        m = m * m;
+        float3 x = 2.0 * fract(p * C.www) - 1.0;
+        float3 h = abs(x) - 0.5;
+        float3 ox = floor(x + 0.5);
+        float3 a0 = x - ox;
+        m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+        float3 g;
+        g.x = a0.x * x0.x + h.x * x0.y;
+        g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+        return 130.0 * dot(m, g);
+    }
+    
+    half4 main(float2 fragCoord) {
+        float2 uv = fragCoord / resolution;
+        
+        // Animated noise for organic movement
+        float noise1 = snoise(uv * 2.0 + time * 0.1) * 0.5 + 0.5;
+        float noise2 = snoise(uv * 3.0 - time * 0.15) * 0.5 + 0.5;
+        float noise3 = snoise(uv * 1.5 + time * 0.08) * 0.5 + 0.5;
+        
+        // Radial mesh points with breathing animation
+        float2 center1 = float2(0.2, 0.3) + float2(sin(time * 0.3), cos(time * 0.2)) * 0.1 * breathScale;
+        float2 center2 = float2(0.8, 0.7) + float2(cos(time * 0.25), sin(time * 0.35)) * 0.1 * breathScale;
+        float2 center3 = float2(0.5, 0.5) + float2(sin(time * 0.2), cos(time * 0.3)) * 0.05 * breathScale;
+        
+        float d1 = distance(uv, center1);
+        float d2 = distance(uv, center2);
+        float d3 = distance(uv, center3);
+        
+        // Smooth color blending with noise modulation
+        float w1 = smoothstep(1.0, 0.0, d1 * 1.5) * (0.7 + noise1 * 0.3);
+        float w2 = smoothstep(1.0, 0.0, d2 * 1.5) * (0.7 + noise2 * 0.3);
+        float w3 = smoothstep(1.0, 0.0, d3 * 1.5) * (0.7 + noise3 * 0.3);
+        
+        float total = w1 + w2 + w3 + 0.001;
+        w1 /= total;
+        w2 /= total;
+        w3 /= total;
+        
+        float3 color = color1 * w1 + color2 * w2 + color3 * w3;
+        
+        // Add subtle vignette
+        float vignette = 1.0 - smoothstep(0.4, 1.0, length(uv - 0.5));
+        color *= 0.8 + vignette * 0.2;
+        
+        return half4(color, 1.0);
+    }
+    """.trimIndent()
+}
 
 /**
  * Mid-Layer Floating Particles that visualize time
@@ -224,8 +309,9 @@ private fun DrawScope.drawParticle(particle: TimeParticle, pulseScale: Float) {
 }
 
 /**
- * Time-reactive background mesh gradient
- * Creates a living, breathing background that responds to time
+ * AGSL Shader-based animated mesh gradient background
+ * Creates a living, breathing background that responds to time and dominant color
+ * Falls back to Canvas-based implementation on older devices
  */
 @Composable
 fun MeshGradientBackground(
@@ -240,7 +326,7 @@ fun MeshGradientBackground(
     val second = time.get(Calendar.SECOND)
     val millisecond = time.get(Calendar.MILLISECOND)
 
-    // Breathing animation
+    // Breathing animation synced to time
     val breathPhase = (second + millisecond / 1000f) / 60f * 2 * PI
     val breathScale by animateFloatAsState(
         targetValue = 0.8f + sin(breathPhase.toFloat()) * 0.2f,
@@ -249,6 +335,17 @@ fun MeshGradientBackground(
     )
 
     val infiniteTransition = rememberInfiniteTransition(label = "mesh")
+
+    // Continuous time animation for shader
+    val animatedTime by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(100000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "time"
+    )
 
     val offsetX by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -270,43 +367,67 @@ fun MeshGradientBackground(
         label = "offsetY"
     )
 
-    Canvas(modifier = modifier.fillMaxSize()) {
-        // Multiple gradient layers for mesh effect
-        val gradients = listOf(
-            Brush.radialGradient(
-                colors = listOf(
-                    dynamicColors.getOrElse(0) { Color(0xFF0F2027) }.copy(alpha = 0.8f * breathScale),
-                    Color.Transparent
+    // Use AGSL shader on Android 13+ for beautiful mesh gradients
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val shader = remember { RuntimeShader(MESH_GRADIENT_SHADER) }
+        
+        Canvas(modifier = modifier.fillMaxSize()) {
+            shader.setFloatUniform("resolution", size.width, size.height)
+            shader.setFloatUniform("time", animatedTime)
+            shader.setFloatUniform("breathScale", breathScale)
+            
+            // Extract RGB from colors
+            val c1 = dynamicColors.getOrElse(0) { Color(0xFF0F2027) }
+            val c2 = dynamicColors.getOrElse(1) { Color(0xFF203A43) }
+            val c3 = dynamicColors.getOrElse(2) { Color(0xFF2C5364) }
+            
+            shader.setFloatUniform("color1", c1.red, c1.green, c1.blue)
+            shader.setFloatUniform("color2", c2.red, c2.green, c2.blue)
+            shader.setFloatUniform("color3", c3.red, c3.green, c3.blue)
+            
+            drawRect(brush = ShaderBrush(shader))
+        }
+    } else {
+        // Fallback: Canvas-based mesh gradient for older devices
+        Canvas(modifier = modifier.fillMaxSize()) {
+            // Multiple gradient layers for mesh effect
+            val gradients = listOf(
+                Brush.radialGradient(
+                    colors = listOf(
+                        dynamicColors.getOrElse(0) { Color(0xFF0F2027) }.copy(alpha = 0.8f * breathScale),
+                        Color.Transparent
+                    ),
+                    center = Offset(size.width * 0.2f + offsetX, size.height * 0.3f + offsetY),
+                    radius = size.maxDimension * 0.8f
                 ),
-                center = Offset(size.width * 0.2f + offsetX, size.height * 0.3f + offsetY),
-                radius = size.maxDimension * 0.8f
-            ),
-            Brush.radialGradient(
-                colors = listOf(
-                    dynamicColors.getOrElse(1) { Color(0xFF203A43) }.copy(alpha = 0.6f * breathScale),
-                    Color.Transparent
+                Brush.radialGradient(
+                    colors = listOf(
+                        dynamicColors.getOrElse(1) { Color(0xFF203A43) }.copy(alpha = 0.6f * breathScale),
+                        Color.Transparent
+                    ),
+                    center = Offset(size.width * 0.8f - offsetX, size.height * 0.7f - offsetY),
+                    radius = size.maxDimension * 0.7f
                 ),
-                center = Offset(size.width * 0.8f - offsetX, size.height * 0.7f - offsetY),
-                radius = size.maxDimension * 0.7f
-            ),
-            Brush.radialGradient(
-                colors = listOf(
-                    dynamicColors.getOrElse(2) { Color(0xFF2C5364) }.copy(alpha = 0.5f * breathScale),
-                    Color.Transparent
-                ),
-                center = Offset(size.width * 0.5f, size.height * 0.5f),
-                radius = size.maxDimension * 0.6f
+                Brush.radialGradient(
+                    colors = listOf(
+                        dynamicColors.getOrElse(2) { Color(0xFF2C5364) }.copy(alpha = 0.5f * breathScale),
+                        Color.Transparent
+                    ),
+                    center = Offset(size.width * 0.5f, size.height * 0.5f),
+                    radius = size.maxDimension * 0.6f
+                )
             )
-        )
 
-        gradients.forEach { brush ->
-            drawRect(brush = brush)
+            gradients.forEach { brush ->
+                drawRect(brush = brush)
+            }
         }
     }
 }
 
 /**
  * Light reflection effect that moves with device tilt
+ * Creates caustic-like reflections on the glass surfaces
  */
 @Composable
 fun GlassReflection(
@@ -317,14 +438,27 @@ fun GlassReflection(
     val offsetX = tiltX * 200
     val offsetY = tiltY * 200
 
+    val infiniteTransition = rememberInfiniteTransition(label = "reflection")
+    
+    // Subtle shimmer animation
+    val shimmer by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmer"
+    )
+
     Canvas(modifier = modifier.fillMaxSize()) {
-        // Primary reflection streak
+        // Primary reflection streak (responds to tilt)
         val reflectionBrush = Brush.linearGradient(
             colors = listOf(
                 Color.Transparent,
-                Color.White.copy(alpha = 0.05f),
-                Color.White.copy(alpha = 0.1f),
-                Color.White.copy(alpha = 0.05f),
+                Color.White.copy(alpha = 0.03f + shimmer * 0.02f),
+                Color.White.copy(alpha = 0.08f + shimmer * 0.04f),
+                Color.White.copy(alpha = 0.03f + shimmer * 0.02f),
                 Color.Transparent
             ),
             start = Offset(offsetX - 200, offsetY - 400),
@@ -333,10 +467,10 @@ fun GlassReflection(
 
         drawRect(brush = reflectionBrush)
 
-        // Secondary subtle reflection
+        // Secondary subtle reflection (more diffuse)
         val secondaryBrush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.08f),
+                Color.White.copy(alpha = 0.06f + shimmer * 0.02f),
                 Color.Transparent
             ),
             center = Offset(size.width * 0.3f + offsetX, size.height * 0.2f + offsetY),
@@ -344,6 +478,18 @@ fun GlassReflection(
         )
 
         drawRect(brush = secondaryBrush)
+
+        // Tertiary accent reflection on opposite corner
+        val tertiaryBrush = Brush.radialGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.04f),
+                Color.Transparent
+            ),
+            center = Offset(size.width * 0.7f - offsetX * 0.5f, size.height * 0.8f - offsetY * 0.5f),
+            radius = 200f
+        )
+
+        drawRect(brush = tertiaryBrush)
     }
 }
 

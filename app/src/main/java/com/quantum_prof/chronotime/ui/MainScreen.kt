@@ -11,7 +11,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,11 +32,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.annotation.SuppressLint
@@ -46,23 +52,41 @@ import com.quantum_prof.chronotime.ui.theme.DeepBackground
 import java.util.Calendar
 
 /**
- * ChronoTime - Time in Motion
- * A living, breathing clock app that feels like a futuristic interface
+ * FLUX: Open Chronology - Time in Motion
+ * A living, breathing clock app with Deep Glass aesthetic
+ * Premium TikTok-style vertical navigation with physics-based animations
  */
 @SuppressLint("MissingPermission", "ObsoleteSdkInt")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen() {
     val currentTime = rememberCurrentTime()
-    val pagerState = rememberPagerState(pageCount = { 9 }) // Extended to 9 clock modes
+    
+    // Responsive design - detect screen size
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val screenHeight = configuration.screenHeightDp.dp
+    val isCompactScreen = screenWidth < 360.dp || screenHeight < 640.dp
+    val isLargeScreen = screenWidth > 600.dp
+    
+    // Responsive scaling factors
+    val scaleFactor = when {
+        isCompactScreen -> 0.85f
+        isLargeScreen -> 1.15f
+        else -> 1f
+    }
+    
+    // Enhanced pager with snap fling behavior for premium feel
+    val pagerState = rememberPagerState(pageCount = { 9 }) // 9 clock modes
 
     // Easter Egg State - 1337 Mode
     var leetMode by remember { mutableStateOf(false) }
 
-    // Parallax from device tilt
+    // Parallax from device tilt (reduced on smaller screens)
     val tilt = rememberTilt()
-    val parallaxX = (tilt.roll * 25).dp
-    val parallaxY = (tilt.pitch * 25).dp
+    val parallaxMultiplier = if (isCompactScreen) 15f else 25f
+    val parallaxX = (tilt.roll * parallaxMultiplier).dp
+    val parallaxY = (tilt.pitch * parallaxMultiplier).dp
 
     // Current clock mode
     val currentMode = pagerState.currentPage
@@ -86,9 +110,19 @@ fun MainScreen() {
         }
     }
 
-    // Clock configuration (horizontal swipe)
+    // Clock configuration (horizontal swipe) with animated transition
     var clockConfig by remember { mutableStateOf(0) }
     val maxConfigs = 3 // Different configurations per clock
+    
+    // Animated config value for smooth transitions
+    val animatedConfig by animateFloatAsState(
+        targetValue = clockConfig.toFloat(),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "configAnim"
+    )
 
     // Vibration setup
     val context = LocalContext.current
@@ -104,10 +138,10 @@ fun MainScreen() {
 
     // Leet Mode Theme
     val LeetTypography = Typography(
-        displayLarge = TextStyle(fontFamily = FontFamily.Monospace, color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 80.sp),
-        displayMedium = TextStyle(fontFamily = FontFamily.Monospace, color = Color.Green, fontWeight = FontWeight.Medium, fontSize = 57.sp),
-        titleMedium = TextStyle(fontFamily = FontFamily.Monospace, color = Color.Green, fontWeight = FontWeight.Medium, fontSize = 16.sp, letterSpacing = 3.sp),
-        labelMedium = TextStyle(fontFamily = FontFamily.Monospace, color = Color.Green, fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 3.sp)
+        displayLarge = TextStyle(fontFamily = FontFamily.Monospace, color = Color.Green, fontWeight = FontWeight.Bold, fontSize = (80 * scaleFactor).sp),
+        displayMedium = TextStyle(fontFamily = FontFamily.Monospace, color = Color.Green, fontWeight = FontWeight.Medium, fontSize = (57 * scaleFactor).sp),
+        titleMedium = TextStyle(fontFamily = FontFamily.Monospace, color = Color.Green, fontWeight = FontWeight.Medium, fontSize = (16 * scaleFactor).sp, letterSpacing = 3.sp),
+        labelMedium = TextStyle(fontFamily = FontFamily.Monospace, color = Color.Green, fontWeight = FontWeight.Medium, fontSize = (12 * scaleFactor).sp, letterSpacing = 3.sp)
     )
 
     val LeetColorScheme = remember {
@@ -122,21 +156,27 @@ fun MainScreen() {
     // Per-second tick haptic
     val currentSecond = currentTime.get(Calendar.SECOND)
 
-    // Pulsating animation synced to seconds
+    // Pulsating animation synced to seconds with physics
     val pulseAlpha by animateFloatAsState(
         targetValue = if (currentSecond % 2 == 0) 1f else 0.85f,
-        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "pulse"
     )
 
-    // Card scale animation for morphing effect
+    // Card scale animation for morphing effect with premium spring physics
     val cardScale by animateFloatAsState(
         targetValue = if (pagerState.isScrollInProgress) 0.92f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "cardScale"
     )
 
-    // Tick haptic every second
+    // Tick haptic every second (CLOCK_TICK feel)
     LaunchedEffect(currentSecond, hapticEnabled) {
         if (hapticEnabled) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -148,12 +188,12 @@ fun MainScreen() {
         }
     }
 
-    // Page change haptic (wheel ratcheting feel)
+    // Page change haptic (gear-like ratcheting feel for premium UX)
     LaunchedEffect(pagerState, hapticEnabled) {
         snapshotFlow { pagerState.currentPage }.collect { _ ->
             // Reset config when changing clock
             clockConfig = 0
-            // Heavy haptic on page settle
+            // Heavy haptic on page settle - feels like clicking through a physical gear
             if (hapticEnabled) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
@@ -161,6 +201,35 @@ fun MainScreen() {
                     @Suppress("DEPRECATION")
                     vibrator.vibrate(50)
                 }
+            }
+        }
+    }
+    
+    // Scroll progress haptic (light clicks during scroll for gear feel)
+    // Uses threshold crossing detection to avoid excessive vibration
+    var lastHapticThreshold by remember { mutableStateOf(0f) }
+    LaunchedEffect(pagerState, hapticEnabled) {
+        snapshotFlow { pagerState.currentPageOffsetFraction }.collect { offset ->
+            val absOffset = abs(offset)
+            // Define threshold points for gear-like haptic feedback
+            val thresholdPoints = listOf(0.15f, 0.35f, 0.55f, 0.75f)
+            
+            // Find which threshold we've crossed
+            val currentThreshold = thresholdPoints.find { threshold ->
+                absOffset >= threshold - 0.05f && absOffset <= threshold + 0.05f
+            }
+            
+            // Only trigger haptic when crossing a new threshold
+            if (hapticEnabled && currentThreshold != null && currentThreshold != lastHapticThreshold) {
+                lastHapticThreshold = currentThreshold
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                }
+            }
+            
+            // Reset threshold when scroll completes
+            if (absOffset < 0.05f) {
+                lastHapticThreshold = 0f
             }
         }
     }
@@ -172,7 +241,10 @@ fun MainScreen() {
 
     val animatedPrimaryColor by animateColorAsState(
         targetValue = modeColors.primary,
-        animationSpec = tween(800),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
         label = "primaryColor"
     )
 
@@ -306,14 +378,24 @@ fun MainScreen() {
                 )
             }
 
-            // === LAYER 4: CLOCK INTERFACES (Vertical Pager - TikTok style) ===
+            // === LAYER 4: CLOCK INTERFACES (Vertical Pager - TikTok style with snap fling) ===
+            // Enhanced pager with premium snap fling behavior
+            val flingBehavior = PagerDefaults.flingBehavior(
+                state = pagerState,
+                snapAnimationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            )
+            
             VerticalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize(),
                 pageSpacing = 0.dp,
-                beyondViewportPageCount = 1
+                beyondViewportPageCount = 1,
+                flingBehavior = flingBehavior
             ) { page ->
-                // Page transition effects
+                // Page transition effects with liquid dissolve feel
                 val pageOffset = pagerState.currentPageOffsetFraction
 
                 Box(
@@ -321,16 +403,22 @@ fun MainScreen() {
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            // Morphing scale effect during scroll
+                            // Morphing scale effect during scroll (liquid feel)
                             val scale = 1f - (abs(pageOffset) * 0.15f)
                             scaleX = scale * cardScale
                             scaleY = scale * cardScale
 
-                            // Fade effect
-                            alpha = 1f - abs(pageOffset) * 0.5f
+                            // Fade effect with easing
+                            alpha = 1f - abs(pageOffset) * 0.6f
 
-                            // Slight rotation for depth
-                            rotationX = pageOffset * -5f
+                            // 3D rotation for depth perception
+                            rotationX = pageOffset * -8f
+                            
+                            // Slight Y translation for parallax depth
+                            translationY = pageOffset * 50f
+                            
+                            // Camera distance for 3D effect
+                            cameraDistance = 12f * density
                         }
                 ) {
                     // Select appropriate glass card style per clock
@@ -341,7 +429,8 @@ fun MainScreen() {
                             config = clockConfig,
                             tiltX = tilt.roll,
                             tiltY = tilt.pitch,
-                            leetMode = leetMode
+                            leetMode = leetMode,
+                            scaleFactor = scaleFactor
                         )
                     }
 
@@ -538,7 +627,7 @@ fun MainScreen() {
 }
 
 /**
- * Centralized clock content renderer
+ * Centralized clock content renderer with responsive scaling
  */
 @Composable
 private fun ClockContent(
@@ -547,30 +636,59 @@ private fun ClockContent(
     config: Int,
     tiltX: Float,
     tiltY: Float,
-    leetMode: Boolean
+    leetMode: Boolean,
+    scaleFactor: Float = 1f
 ) {
-    when (page) {
-        0 -> ModernTime(time, config)
-        1 -> HexClock(time)
-        2 -> BerlinClock(time)
-        3 -> BinaryClock(time)
-        4 -> SwatchBeatClock(time)
-        5 -> UnixClock(time)
-        6 -> SynesthesiaClock(time)
-        7 -> SolarDial(time)
-        8 -> FluidHourglass(time, tiltX, tiltY)
+    // Wrap content in a responsive container
+    Box(
+        modifier = Modifier.graphicsLayer {
+            scaleX = scaleFactor
+            scaleY = scaleFactor
+        },
+        contentAlignment = Alignment.Center
+    ) {
+        when (page) {
+            0 -> ModernTime(time, config, scaleFactor)
+            1 -> HexClock(time)
+            2 -> BerlinClock(time)
+            3 -> BinaryClock(time)
+            4 -> SwatchBeatClock(time)
+            5 -> UnixClock(time)
+            6 -> SynesthesiaClock(time)
+            7 -> SolarDial(time)
+            8 -> FluidHourglass(time, tiltX, tiltY)
+        }
     }
 }
 
 /**
  * Enhanced Modern Time display with variable configurations
+ * Supports variable font weight that gets "heavier" as seconds progress
  */
 @Composable
-fun ModernTime(time: Calendar, config: Int = 0) {
+fun ModernTime(time: Calendar, config: Int = 0, scaleFactor: Float = 1f) {
     val hour = time.get(Calendar.HOUR_OF_DAY)
     val minute = time.get(Calendar.MINUTE)
     val second = time.get(Calendar.SECOND)
     val millisecond = time.get(Calendar.MILLISECOND)
+
+    // Variable font weight based on time progression
+    // Seconds get "heavier" as they progress (simulating variable font weight)
+    val secondWeight by animateFloatAsState(
+        targetValue = 300f + (second / 60f) * 600f, // Range from Light (300) to Black (900)
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "secondWeight"
+    )
+    
+    // Minutes affect hour display weight
+    val minuteWeight by animateFloatAsState(
+        targetValue = 400f + (minute / 60f) * 500f,
+        animationSpec = tween(1000),
+        label = "minuteWeight"
+    )
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         when (config) {
@@ -579,16 +697,18 @@ fun ModernTime(time: Calendar, config: Int = 0) {
                 Text(
                     text = String.format(Locale.getDefault(), "%02d:%02d", hour, minute),
                     style = MaterialTheme.typography.displayLarge.copy(
-                        fontWeight = FontWeight.Black,
-                        fontSize = 80.sp,
+                        fontWeight = FontWeight(minuteWeight.toInt().coerceIn(100, 900)),
+                        fontSize = (80 * scaleFactor).sp,
                         letterSpacing = (-2).sp
                     )
                 )
+                // Seconds with variable weight
                 Text(
                     text = String.format(Locale.getDefault(), "%02d", second),
                     style = MaterialTheme.typography.displayMedium.copy(
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Light
+                        fontWeight = FontWeight(secondWeight.toInt().coerceIn(100, 900)),
+                        fontSize = (57 * scaleFactor).sp
                     )
                 )
             }
@@ -598,14 +718,14 @@ fun ModernTime(time: Calendar, config: Int = 0) {
                     text = String.format(Locale.getDefault(), "%02d:%02d:%02d", hour, minute, second),
                     style = MaterialTheme.typography.displayLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 56.sp
+                        fontSize = (56 * scaleFactor).sp
                     )
                 )
-                // Milliseconds progress bar
+                // Milliseconds progress bar with glow
                 Box(
                     modifier = Modifier
                         .padding(top = 16.dp)
-                        .width(200.dp)
+                        .width((200 * scaleFactor).dp)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
                         .background(Color.White.copy(alpha = 0.1f))
@@ -637,8 +757,8 @@ fun ModernTime(time: Calendar, config: Int = 0) {
                     Text(
                         text = String.format(Locale.getDefault(), "%d:%02d", displayHour, minute),
                         style = MaterialTheme.typography.displayLarge.copy(
-                            fontWeight = FontWeight.Black,
-                            fontSize = 72.sp
+                            fontWeight = FontWeight(minuteWeight.toInt().coerceIn(100, 900)),
+                            fontSize = (72 * scaleFactor).sp
                         )
                     )
                     Column(
@@ -647,7 +767,8 @@ fun ModernTime(time: Calendar, config: Int = 0) {
                         Text(
                             text = String.format(Locale.getDefault(), "%02d", second),
                             style = MaterialTheme.typography.headlineSmall.copy(
-                                color = Color.White.copy(alpha = 0.5f)
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontWeight = FontWeight(secondWeight.toInt().coerceIn(100, 900))
                             )
                         )
                         Text(
