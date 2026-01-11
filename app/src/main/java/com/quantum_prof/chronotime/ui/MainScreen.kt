@@ -372,11 +372,15 @@ fun MainScreen() {
 
             // === LAYER 4: CLOCK INTERFACES (Vertical Pager - TikTok style with snap fling) ===
             // Enhanced pager with premium snap fling behavior - STICKY/ELASTIC physics
+            // Animation constants for elastic feel
+            val elasticDampingRatio = 0.6f // Lower damping = more bouncy/elastic
+            val elasticStiffness = 200f // Lower stiffness = more stretchy feel
+            
             val flingBehavior = PagerDefaults.flingBehavior(
                 state = pagerState,
                 snapAnimationSpec = spring(
-                    dampingRatio = 0.6f, // Lower damping = more bouncy/elastic
-                    stiffness = 200f // Lower stiffness = more stretchy feel
+                    dampingRatio = elasticDampingRatio,
+                    stiffness = elasticStiffness
                 )
             )
             

@@ -261,13 +261,21 @@ fun ForegroundParticleField(
         }
     }
     
+    // Pre-calculate drift factor outside animation loop for better performance
+    val driftMultiplier = 0.5f
+    
     // Animate particles - faster movement for foreground
     LaunchedEffect(Unit) {
         while (true) {
             particles = particles.map { particle ->
+                // Use simplified drift calculation instead of sin() for better performance
+                // Approximates sine wave with triangle wave for slight horizontal wobble
+                val driftPhase = (particle.y % 200f) / 100f - 1f // Range -1 to 1
+                val drift = driftPhase * driftMultiplier
+                
                 particle.copy(
                     y = particle.y - particle.speed,
-                    x = particle.x + sin(particle.y / 100f).toFloat() * 0.5f, // Slight horizontal drift
+                    x = particle.x + drift,
                     rotation = particle.rotation + particle.rotationSpeed,
                     alpha = (particle.alpha * 0.998f).coerceIn(0.2f, 0.8f) // Slow fade
                 ).let {

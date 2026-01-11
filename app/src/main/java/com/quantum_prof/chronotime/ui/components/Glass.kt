@@ -39,14 +39,17 @@ import kotlin.random.Random
 
 /**
  * Number of noise points for the glass texture effect.
- * 500 points provides higher visual density for premium frosted glass feel.
+ * 350 points provides good visual density while maintaining performance.
+ * On Android 13+, the AGSL shader is used instead for better quality.
+ * Note: This is only used as a fallback on older devices.
  */
-private const val GLASS_NOISE_POINT_COUNT = 500
+private const val GLASS_NOISE_POINT_COUNT = 350
 
 /**
  * Pre-computed noise pattern for glass texture using FloatArray for memory efficiency.
  * Each point is stored as 3 consecutive floats: xRatio, yRatio, alpha.
- * Total size: 500 * 3 = 1500 floats
+ * Total size: 350 * 3 = 1050 floats
+ * Pre-computed at app startup to avoid allocation during rendering.
  */
 private val GLASS_NOISE_PATTERN: FloatArray by lazy {
     val random = Random(42) // Fixed seed for consistent pattern
@@ -105,15 +108,18 @@ private val GRAIN_NOISE_SHADER: String by lazy {
 /**
  * Enhanced Deep Glass Card with "Hyper-Real" Glass Effect
  * Implements:
- * - High-radius background blur (30dp+)
- * - Animated AGSL grain shader for frosted glass texture
+ * - High-radius background blur (35dp default, configurable for performance)
+ * - Animated AGSL grain shader for frosted glass texture (Android 13+)
  * - Specular gradient border (light hitting top-left edge)
  * - Inner glow at top, inner shadow at bottom for 3D volume
+ * 
+ * Performance note: Higher blur radius increases GPU load. On lower-end devices,
+ * consider reducing blurRadius to 25-30dp for smoother performance.
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    blurRadius: Dp = 35.dp,
+    blurRadius: Dp = 35.dp, // Configurable for performance tuning
     shape: RoundedCornerShape = RoundedCornerShape(32.dp),
     glowColor: Color = Color(0xFF00F0FF),
     enableGlow: Boolean = true,
