@@ -36,8 +36,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        }
     }
     buildFeatures {
         compose = true
@@ -59,6 +61,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.kyant.backdrop)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

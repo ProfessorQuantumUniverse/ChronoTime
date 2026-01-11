@@ -17,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,12 +37,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Calendar
@@ -58,9 +65,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
+import com.quantum_prof.chronotime.ui.utils.AutoScalingText
 
 // --- Components ---
 
+/**
+ * HexClock - Displays time as a hex color code
+ * RESPONSIVE: Uses AutoScalingText to ensure hex code fits on one line
+ * on all screen sizes from Galaxy Z Flip outer screen to tablets.
+ */
 @Composable
 fun HexClock(time: Calendar) {
     val r = time.get(Calendar.HOUR_OF_DAY)
@@ -68,32 +81,69 @@ fun HexClock(time: Calendar) {
     val b = time.get(Calendar.SECOND)
 
     val hexString = String.format("#%02X%02X%02X", r, g, b)
-    // Minimalist: Text IS the color. Background handled by parent.
-    // val color = Color(red = r / 24f, green = g / 60f, blue = b / 60f) // Removed unused variable
+    
+    // Get screen width for responsive sizing
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val isCompactScreen = screenWidth < 360.dp
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
+        // AutoScalingText ensures the hex code NEVER wraps to a second line
+        AutoScalingText(
             text = hexString,
+            modifier = Modifier.fillMaxWidth(0.9f),
             style = MaterialTheme.typography.displayLarge.copy(
                 fontFamily = FontFamily.Monospace,
-                color = Color.White, // Text should be readable against the colored background
                 shadow = androidx.compose.ui.graphics.Shadow(
                     color = Color.Black.copy(alpha = 0.5f),
                     blurRadius = 10f
                 )
-            )
+            ),
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            maxFontSize = if (isCompactScreen) 48.sp else 80.sp,
+            minFontSize = 16.sp,
+            scalingFactor = 0.12f,
+            textAlign = TextAlign.Center
         )
     }
 }
 
+/**
+ * BerlinClock - The famous Berlin Mengenlehreuhr
+ * RESPONSIVE: Blocks maintain aspect ratio and shrink to fit screen width.
+ * On small screens (< 360dp), spacing is reduced.
+ */
 @Composable
 fun BerlinClock(time: Calendar) {
     val hours = time.get(Calendar.HOUR_OF_DAY)
     val minutes = time.get(Calendar.MINUTE)
     val seconds = time.get(Calendar.SECOND)
+    
+    // Responsive design
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val isCompactScreen = screenWidth < 360.dp
+    
+    // Responsive spacing - reduced on small screens
+    val rowSpacing = if (isCompactScreen) 4.dp else 8.dp
+    val lampSpacing = if (isCompactScreen) 3.dp else 6.dp
+    val lampHeight = if (isCompactScreen) 36.dp else 50.dp
+    val secondsLampSize = if (isCompactScreen) 44.dp else 60.dp
+    val padding = if (isCompactScreen) 8.dp else 16.dp
+    
+    // Scale factor for very small screens
+    val scaleFactor = when {
+        screenWidth < 280.dp -> 0.75f
+        screenWidth < 320.dp -> 0.85f
+        screenWidth < 360.dp -> 0.95f
+        else -> 1f
+    }
 
     // Track previous 5-hour count for thud animation
     // Use -1 as sentinel value to avoid triggering on initial render
@@ -161,9 +211,12 @@ fun BerlinClock(time: Calendar) {
         }
     }
 
+    // Apply overall scale for very small screens
     Column(
-        modifier = Modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .padding(padding)
+            .scale(scaleFactor),
+        verticalArrangement = Arrangement.spacedBy(rowSpacing),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Seconds Lamp with neon glow
@@ -171,12 +224,12 @@ fun BerlinClock(time: Calendar) {
             active = seconds % 2 == 0, 
             color = Color.Yellow, 
             shape = CircleShape, 
-            size = 60.dp
+            size = secondsLampSize
         )
 
         // 5 Hours Row with thud animation
         Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(lampSpacing),
             modifier = Modifier.graphicsLayer {
                 scaleX = thudScale.value
                 scaleY = thudScale.value
@@ -186,42 +239,42 @@ fun BerlinClock(time: Calendar) {
                 NeonBerlinLamp(
                     active = hours / 5 > i, 
                     color = Color.Red, 
-                    modifier = Modifier.weight(1f).height(50.dp)
+                    modifier = Modifier.weight(1f).height(lampHeight)
                 )
             }
         }
 
         // 1 Hour Row
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(lampSpacing)) {
             repeat(4) { i ->
                 NeonBerlinLamp(
                     active = hours % 5 > i, 
                     color = Color.Red, 
-                    modifier = Modifier.weight(1f).height(50.dp)
+                    modifier = Modifier.weight(1f).height(lampHeight)
                 )
             }
         }
 
         // 5 Minutes Row
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(lampSpacing)) {
             repeat(11) { i ->
                 val isRed = (i + 1) % 3 == 0
                 val c = if (isRed) Color.Red else Color.Yellow
                 NeonBerlinLamp(
                     active = minutes / 5 > i, 
                     color = c, 
-                    modifier = Modifier.weight(1f).height(50.dp)
+                    modifier = Modifier.weight(1f).height(lampHeight)
                 )
             }
         }
 
         // 1 Minute Row
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(lampSpacing)) {
             repeat(4) { i ->
                 NeonBerlinLamp(
                     active = minutes % 5 > i, 
                     color = Color.Yellow, 
-                    modifier = Modifier.weight(1f).height(50.dp)
+                    modifier = Modifier.weight(1f).height(lampHeight)
                 )
             }
         }
@@ -319,6 +372,11 @@ fun BerlinLamp(
     NeonBerlinLamp(active, color, modifier, shape, size)
 }
 
+/**
+ * BinaryClock - Displays time as binary numbers
+ * RESPONSIVE: On small screens (< 360dp), reduces gap between dots from 16dp to 4dp.
+ * The entire layout scales down based on screen width using Modifier.scale().
+ */
 @Composable
 fun BinaryClock(time: Calendar) {
     val h = time.get(Calendar.HOUR_OF_DAY)
@@ -326,18 +384,37 @@ fun BinaryClock(time: Calendar) {
     val s = time.get(Calendar.SECOND)
 
     var showCheat by remember { mutableStateOf<Int?>(null) } // Index of column clicked
+    
+    // Responsive design
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val isCompactScreen = screenWidth < 360.dp
+    
+    // Responsive spacing - reduced on small screens
+    val columnSpacing = if (isCompactScreen) 4.dp else 16.dp
+    val dotSpacing = if (isCompactScreen) 6.dp else 12.dp
+    val separatorWidth = if (isCompactScreen) 8.dp else 16.dp
+    
+    // Scale factor for entire binary clock based on screen width
+    val scaleFactor = when {
+        screenWidth < 280.dp -> 0.65f  // Galaxy Z Flip outer screen
+        screenWidth < 320.dp -> 0.75f
+        screenWidth < 360.dp -> 0.85f
+        else -> 1f
+    }
 
     // Columns: H1 (2 bits), H2 (4 bits), M1 (3 bits), M2 (4 bits), S1 (3 bits), S2 (4 bits)
     val digits = listOf(h / 10, h % 10, m / 10, m % 10, s / 10, s % 10)
     val bitCounts = listOf(2, 4, 3, 4, 3, 4)
 
     Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.Bottom
+        horizontalArrangement = Arrangement.spacedBy(columnSpacing),
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier.scale(scaleFactor)
     ) {
         digits.forEachIndexed { index, digit ->
             Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(dotSpacing),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.clickable {
                    showCheat = if (showCheat == index) null else index
@@ -354,11 +431,11 @@ fun BinaryClock(time: Calendar) {
 
                 for (bit in (bitCounts[index] - 1) downTo 0) {
                     val isActive = ((digit shr bit) and 1) == 1
-                    GlowingOrb(isActive = isActive)
+                    GlowingOrb(isActive = isActive, isCompact = isCompactScreen)
                 }
             }
             if (index == 1 || index == 3) {
-                 Spacer(modifier = Modifier.width(16.dp))
+                 Spacer(modifier = Modifier.width(separatorWidth))
             }
         }
     }
@@ -366,10 +443,20 @@ fun BinaryClock(time: Calendar) {
 
 /**
  * Enhanced Binary Dot as "Glowing Orb" with radial gradients and blur bloom
+ * RESPONSIVE: Supports compact mode with smaller orb size
+ * @param isActive Whether the orb is lit
+ * @param isCompact Whether to use compact sizing for small screens
  */
 @Composable
-fun GlowingOrb(isActive: Boolean) {
+fun GlowingOrb(isActive: Boolean, isCompact: Boolean = false) {
     val orbColor = Color(0xFF00E5FF)
+    
+    // Responsive base size
+    val baseSize = if (isCompact) 28.dp else 40.dp
+    val bloomSize = if (isCompact) 35.dp else 50.dp
+    val coreSize = if (isCompact) 24.dp else 36.dp
+    val glowElevation = if (isCompact) 14.dp else 20.dp
+    val blurRadius = if (isCompact) 5.dp else 8.dp
     
     val color by animateColorAsState(
         targetValue = if (isActive) orbColor else orbColor.copy(alpha = 0.08f),
@@ -400,10 +487,10 @@ fun GlowingOrb(isActive: Boolean) {
 
     Box(
         modifier = Modifier
-            .size(40.dp * scale)
+            .size(baseSize * scale)
             // Outer bloom glow
             .shadow(
-                elevation = if (isActive) 20.dp else 0.dp,
+                elevation = if (isActive) glowElevation else 0.dp,
                 shape = CircleShape,
                 spotColor = orbColor.copy(alpha = 0.8f * glowAlpha),
                 ambientColor = orbColor.copy(alpha = 0.5f * glowAlpha)
@@ -414,8 +501,8 @@ fun GlowingOrb(isActive: Boolean) {
         if (isActive) {
             Canvas(
                 modifier = Modifier
-                    .size(50.dp * scale)
-                    .blur(8.dp)
+                    .size(bloomSize * scale)
+                    .blur(blurRadius)
             ) {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -432,7 +519,7 @@ fun GlowingOrb(isActive: Boolean) {
         
         // Core orb with radial gradient
         Canvas(
-            modifier = Modifier.size(36.dp * scale)
+            modifier = Modifier.size(coreSize * scale)
         ) {
             // Outer glow ring
             drawCircle(
