@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -111,18 +112,20 @@ fun MainScreen() {
     }
 
     // Clock configuration (horizontal swipe) with animated transition
-    var clockConfig by remember { mutableStateOf(0) }
+    // Each clock mode has its own distinct configuration state
+    val clockConfigs = remember { mutableStateOf(IntArray(9) { 0 }) }
     val maxConfigs = 3 // Different configurations per clock
     
-    // Animated config value for smooth transitions
-    val animatedConfig by animateFloatAsState(
-        targetValue = clockConfig.toFloat(),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "configAnim"
-    )
+    // Helper function to get/set config for a specific clock mode
+    fun getClockConfig(mode: Int): Int = clockConfigs.value[mode]
+    fun setClockConfig(mode: Int, value: Int) {
+        val newConfigs = clockConfigs.value.copyOf()
+        newConfigs[mode] = value.coerceIn(0, maxConfigs - 1)
+        clockConfigs.value = newConfigs
+    }
+    
+    // Current config for the active clock (for UI indicators)
+    val currentClockConfig = clockConfigs.value.getOrElse(currentMode) { 0 }
 
     // Vibration setup
     val context = LocalContext.current
@@ -191,8 +194,7 @@ fun MainScreen() {
     // Page change haptic (gear-like ratcheting feel for premium UX)
     LaunchedEffect(pagerState, hapticEnabled) {
         snapshotFlow { pagerState.currentPage }.collect { _ ->
-            // Reset config when changing clock
-            clockConfig = 0
+            // Note: Each clock now maintains its own config state, no reset needed
             // Heavy haptic on page settle - feels like clicking through a physical gear
             if (hapticEnabled) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -286,17 +288,7 @@ fun MainScreen() {
                         }
                     )
                 }
-                // Horizontal drag for clock configuration
-                .pointerInput(hapticEnabled) {
-                    detectHorizontalDragGestures { _, dragAmount ->
-                        if (abs(dragAmount) > 30) {
-                            clockConfig = (clockConfig + if (dragAmount > 0) 1 else -1).coerceIn(0, maxConfigs - 1)
-                            if (hapticEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
-                            }
-                        }
-                    }
-                }
+                // Note: Horizontal drag handling moved to per-page level for independent clock configs
         ) {
             // === LAYER 1: BACKGROUND ===
             // Dynamic mesh gradient background
@@ -379,12 +371,16 @@ fun MainScreen() {
             }
 
             // === LAYER 4: CLOCK INTERFACES (Vertical Pager - TikTok style with snap fling) ===
-            // Enhanced pager with premium snap fling behavior
+            // Enhanced pager with premium snap fling behavior - STICKY/ELASTIC physics
+            // Animation constants for elastic feel
+            val elasticDampingRatio = 0.6f // Lower damping = more bouncy/elastic
+            val elasticStiffness = 200f // Lower stiffness = more stretchy feel
+            
             val flingBehavior = PagerDefaults.flingBehavior(
                 state = pagerState,
                 snapAnimationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessLow
+                    dampingRatio = elasticDampingRatio,
+                    stiffness = elasticStiffness
                 )
             )
             
@@ -397,16 +393,40 @@ fun MainScreen() {
             ) { page ->
                 // Page transition effects with liquid dissolve feel
                 val pageOffset = pagerState.currentPageOffsetFraction
+                
+                // Get this page's specific config
+                val pageConfig = getClockConfig(page)
+                
+                // Calculate elastic stretch factor - page stretches slightly before snapping
+                val stretchFactor = 1f + (abs(pageOffset) * 0.08f) // Subtle stretch
+                val elasticScale = if (pageOffset != 0f) {
+                    1f - (abs(pageOffset) * 0.12f) // Shrink as it moves away
+                } else {
+                    1f
+                }
 
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
                         .fillMaxSize()
+                        // Horizontal drag for clock configuration - per page
+                        .pointerInput(page, hapticEnabled) {
+                            detectHorizontalDragGestures { _, dragAmount ->
+                                if (abs(dragAmount) > 30) {
+                                    val newConfig = (getClockConfig(page) + if (dragAmount > 0) 1 else -1)
+                                    setClockConfig(page, newConfig)
+                                    if (hapticEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                                    }
+                                }
+                            }
+                        }
                         .graphicsLayer {
-                            // Morphing scale effect during scroll (liquid feel)
-                            val scale = 1f - (abs(pageOffset) * 0.15f)
-                            scaleX = scale * cardScale
-                            scaleY = scale * cardScale
+                            // ENHANCED: Morphing scale with elastic stretch effect
+                            val scale = elasticScale * cardScale
+                            scaleX = scale
+                            // Y scale gets slightly stretched during swipe for "sticky" feel
+                            scaleY = scale * (1f + abs(pageOffset) * 0.03f)
 
                             // Fade effect with easing
                             alpha = 1f - abs(pageOffset) * 0.6f
@@ -426,7 +446,7 @@ fun MainScreen() {
                         ClockContent(
                             page = page,
                             time = currentTime,
-                            config = clockConfig,
+                            config = pageConfig,
                             tiltX = tilt.roll,
                             tiltY = tilt.pitch,
                             leetMode = leetMode,
@@ -456,6 +476,18 @@ fun MainScreen() {
                         }
                     }
                 }
+            }
+            
+            // === LAYER 4.5: FOREGROUND PARTICLES (pass in front of glass - sharp, fast) ===
+            if (!leetMode && !focusMode) {
+                ForegroundParticleField(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .offset(x = -parallaxX / 3, y = -parallaxY / 3), // Inverse parallax for depth
+                    time = currentTime,
+                    particleCount = 10,
+                    baseColor = animatedPrimaryColor
+                )
             }
 
             // === LAYER 5: UI OVERLAYS (Hidden in Focus Mode) ===
@@ -546,11 +578,11 @@ fun MainScreen() {
                             repeat(maxConfigs) { index ->
                                 Box(
                                     modifier = Modifier
-                                        .width(if (index == clockConfig) 20.dp else 8.dp)
+                                        .width(if (index == currentClockConfig) 20.dp else 8.dp)
                                         .height(4.dp)
                                         .clip(RoundedCornerShape(2.dp))
                                         .background(
-                                            if (index == clockConfig) animatedPrimaryColor.copy(alpha = 0.8f)
+                                            if (index == currentClockConfig) animatedPrimaryColor.copy(alpha = 0.8f)
                                             else Color.White.copy(alpha = 0.2f)
                                         )
                                 )
@@ -664,6 +696,7 @@ private fun ClockContent(
 /**
  * Enhanced Modern Time display with variable configurations
  * Supports variable font weight that gets "heavier" as seconds progress
+ * ENHANCED: Drop shadows for text readability and Bold font weights
  */
 @Composable
 fun ModernTime(time: Calendar, config: Int = 0, scaleFactor: Float = 1f) {
@@ -675,7 +708,7 @@ fun ModernTime(time: Calendar, config: Int = 0, scaleFactor: Float = 1f) {
     // Variable font weight based on time progression
     // Seconds get "heavier" as they progress (simulating variable font weight)
     val secondWeight by animateFloatAsState(
-        targetValue = 300f + (second / 60f) * 600f, // Range from Light (300) to Black (900)
+        targetValue = 400f + (second / 60f) * 500f, // Range from Normal (400) to Black (900)
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioLowBouncy,
             stiffness = Spring.StiffnessLow
@@ -685,40 +718,57 @@ fun ModernTime(time: Calendar, config: Int = 0, scaleFactor: Float = 1f) {
     
     // Minutes affect hour display weight
     val minuteWeight by animateFloatAsState(
-        targetValue = 400f + (minute / 60f) * 500f,
+        targetValue = 500f + (minute / 60f) * 400f, // Range from Medium (500) to Black (900)
         animationSpec = tween(1000),
         label = "minuteWeight"
+    )
+    
+    // Drop shadow for text readability
+    val textShadow = androidx.compose.ui.graphics.Shadow(
+        color = Color.Black.copy(alpha = 0.35f),
+        blurRadius = 14f,
+        offset = Offset(2f, 4f)
+    )
+    
+    // Secondary lighter shadow for depth
+    val textShadowLight = androidx.compose.ui.graphics.Shadow(
+        color = Color.Black.copy(alpha = 0.2f),
+        blurRadius = 20f,
+        offset = Offset(0f, 6f)
     )
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         when (config) {
             0 -> {
-                // Default: Large time with seconds below
+                // Default: Large time with seconds below - ENHANCED with shadows
                 Text(
                     text = String.format(Locale.getDefault(), "%02d:%02d", hour, minute),
                     style = MaterialTheme.typography.displayLarge.copy(
-                        fontWeight = FontWeight(minuteWeight.toInt().coerceIn(100, 900)),
+                        fontWeight = FontWeight.Bold,
                         fontSize = (80 * scaleFactor).sp,
-                        letterSpacing = (-2).sp
+                        letterSpacing = (-2).sp,
+                        shadow = textShadow
                     )
                 )
-                // Seconds with variable weight
+                // Seconds with variable weight and shadow
                 Text(
                     text = String.format(Locale.getDefault(), "%02d", second),
                     style = MaterialTheme.typography.displayMedium.copy(
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight(secondWeight.toInt().coerceIn(100, 900)),
-                        fontSize = (57 * scaleFactor).sp
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (57 * scaleFactor).sp,
+                        shadow = textShadowLight
                     )
                 )
             }
             1 -> {
-                // Config 1: Full time inline
+                // Config 1: Full time inline - ENHANCED with shadows
                 Text(
                     text = String.format(Locale.getDefault(), "%02d:%02d:%02d", hour, minute, second),
                     style = MaterialTheme.typography.displayLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        fontSize = (56 * scaleFactor).sp
+                        fontSize = (56 * scaleFactor).sp,
+                        shadow = textShadow
                     )
                 )
                 // Milliseconds progress bar with glow
@@ -746,7 +796,7 @@ fun ModernTime(time: Calendar, config: Int = 0, scaleFactor: Float = 1f) {
                 }
             }
             2 -> {
-                // Config 2: 12-hour format with AM/PM
+                // Config 2: 12-hour format with AM/PM - ENHANCED
                 val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
                 val amPm = if (hour < 12) "AM" else "PM"
 
@@ -757,8 +807,9 @@ fun ModernTime(time: Calendar, config: Int = 0, scaleFactor: Float = 1f) {
                     Text(
                         text = String.format(Locale.getDefault(), "%d:%02d", displayHour, minute),
                         style = MaterialTheme.typography.displayLarge.copy(
-                            fontWeight = FontWeight(minuteWeight.toInt().coerceIn(100, 900)),
-                            fontSize = (72 * scaleFactor).sp
+                            fontWeight = FontWeight.Bold,
+                            fontSize = (72 * scaleFactor).sp,
+                            shadow = textShadow
                         )
                     )
                     Column(
@@ -767,15 +818,17 @@ fun ModernTime(time: Calendar, config: Int = 0, scaleFactor: Float = 1f) {
                         Text(
                             text = String.format(Locale.getDefault(), "%02d", second),
                             style = MaterialTheme.typography.headlineSmall.copy(
-                                color = Color.White.copy(alpha = 0.5f),
-                                fontWeight = FontWeight(secondWeight.toInt().coerceIn(100, 900))
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontWeight = FontWeight.Bold,
+                                shadow = textShadowLight
                             )
                         )
                         Text(
                             text = amPm,
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF00F0FF)
+                                color = Color(0xFF00F0FF),
+                                shadow = textShadowLight
                             )
                         )
                     }
@@ -786,7 +839,7 @@ fun ModernTime(time: Calendar, config: Int = 0, scaleFactor: Float = 1f) {
 }
 
 /**
- * Mode-specific color palettes
+ * Mode-specific color palettes - ENHANCED for vibrant backgrounds
  */
 data class ModeColors(
     val primary: Color,
@@ -796,55 +849,55 @@ data class ModeColors(
 
 private fun getModeColors(mode: Int): ModeColors {
     return when (mode) {
-        0 -> ModeColors( // Modern
+        0 -> ModeColors( // Modern - Enhanced vibrancy
             Color(0xFF00F0FF),
             Color(0xFFFF006E),
-            listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364))
+            listOf(Color(0xFF0F2A35), Color(0xFF1E4A5A), Color(0xFF2C6E7E))
         )
         1 -> ModeColors( // Hex
             Color(0xFFFFFFFF),
             Color(0xFFCCCCCC),
-            listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364))
+            listOf(Color(0xFF152535), Color(0xFF253545), Color(0xFF355565))
         )
-        2 -> ModeColors( // Berlin
+        2 -> ModeColors( // Berlin - Warmer, more vibrant
             Color(0xFFFF6B6B),
             Color(0xFFFFE66D),
-            listOf(Color(0xFF1a1a2e), Color(0xFF16213e), Color(0xFF0f3460))
+            listOf(Color(0xFF2a1a3e), Color(0xFF26315e), Color(0xFF1f4580))
         )
-        3 -> ModeColors( // Binary
+        3 -> ModeColors( // Binary - Deeper contrast
             Color(0xFF00E5FF),
             Color(0xFF00FF88),
-            listOf(Color(0xFF0a0a0a), Color(0xFF1a1a2e), Color(0xFF0f0f1a))
+            listOf(Color(0xFF0a0a12), Color(0xFF1a2a3e), Color(0xFF0f1f2a))
         )
-        4 -> ModeColors( // Swatch
+        4 -> ModeColors( // Swatch - More energetic
             Color(0xFF00F260),
             Color(0xFF0575E6),
-            listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364))
+            listOf(Color(0xFF0F2A35), Color(0xFF254555), Color(0xFF3C6575))
         )
-        5 -> ModeColors( // Unix
+        5 -> ModeColors( // Unix - Terminal green glow
             Color(0xFF00FF00),
             Color(0xFF00AA00),
-            listOf(Color(0xFF000000), Color(0xFF0a0f0a), Color(0xFF001100))
+            listOf(Color(0xFF000508), Color(0xFF0a1510), Color(0xFF001810))
         )
-        6 -> ModeColors( // Synesthesia
+        6 -> ModeColors( // Synesthesia - Rich purples
             Color(0xFFFF6B6B),
             Color(0xFF9B59B6),
-            listOf(Color(0xFF1a1a2e), Color(0xFF2d2d4a), Color(0xFF1a1a2e))
+            listOf(Color(0xFF2a1a3e), Color(0xFF3d2d5a), Color(0xFF2a1a3e))
         )
-        7 -> ModeColors( // Solar
+        7 -> ModeColors( // Solar - Sky blues enhanced
             Color(0xFFFFB347),
             Color(0xFF4A90D9),
-            listOf(Color(0xFF1a3a5c), Color(0xFF4A90D9), Color(0xFF87CEEB))
+            listOf(Color(0xFF1a4a6c), Color(0xFF5A9AE9), Color(0xFF97DEFF))
         )
-        8 -> ModeColors( // Fluid Hourglass
+        8 -> ModeColors( // Fluid Hourglass - Ocean depth
             Color(0xFF00D2FF),
             Color(0xFF3A7BD5),
-            listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364))
+            listOf(Color(0xFF0F2A35), Color(0xFF254A5A), Color(0xFF3C6A7A))
         )
         else -> ModeColors(
             Color(0xFF00F0FF),
             Color(0xFFFF006E),
-            listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364))
+            listOf(Color(0xFF0F2A35), Color(0xFF1E4A5A), Color(0xFF2C6E7E))
         )
     }
 }

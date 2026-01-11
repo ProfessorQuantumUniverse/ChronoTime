@@ -23,6 +23,7 @@ import kotlin.random.Random
 /**
  * AGSL Shader source for animated mesh gradient background
  * Creates a living, pulsating gradient that responds to time
+ * ENHANCED: More vibrant colors, deeper saturation for premium glass blur
  * Lazy initialized to avoid allocation on class load
  */
 private val MESH_GRADIENT_SHADER: String by lazy {
@@ -67,35 +68,52 @@ private val MESH_GRADIENT_SHADER: String by lazy {
     half4 main(float2 fragCoord) {
         float2 uv = fragCoord / resolution;
         
-        // Animated noise for organic movement
-        float noise1 = snoise(uv * 2.0 + time * 0.1) * 0.5 + 0.5;
-        float noise2 = snoise(uv * 3.0 - time * 0.15) * 0.5 + 0.5;
-        float noise3 = snoise(uv * 1.5 + time * 0.08) * 0.5 + 0.5;
+        // Animated noise for organic movement - ENHANCED amplitude
+        float noise1 = snoise(uv * 2.0 + time * 0.12) * 0.5 + 0.5;
+        float noise2 = snoise(uv * 3.0 - time * 0.18) * 0.5 + 0.5;
+        float noise3 = snoise(uv * 1.5 + time * 0.1) * 0.5 + 0.5;
+        float noise4 = snoise(uv * 4.0 + time * 0.08) * 0.5 + 0.5;
         
-        // Radial mesh points with breathing animation
-        float2 center1 = float2(0.2, 0.3) + float2(sin(time * 0.3), cos(time * 0.2)) * 0.1 * breathScale;
-        float2 center2 = float2(0.8, 0.7) + float2(cos(time * 0.25), sin(time * 0.35)) * 0.1 * breathScale;
-        float2 center3 = float2(0.5, 0.5) + float2(sin(time * 0.2), cos(time * 0.3)) * 0.05 * breathScale;
+        // Radial mesh points with breathing animation - MORE DYNAMIC
+        float2 center1 = float2(0.15, 0.25) + float2(sin(time * 0.35), cos(time * 0.25)) * 0.15 * breathScale;
+        float2 center2 = float2(0.85, 0.75) + float2(cos(time * 0.3), sin(time * 0.4)) * 0.15 * breathScale;
+        float2 center3 = float2(0.5, 0.5) + float2(sin(time * 0.25), cos(time * 0.35)) * 0.08 * breathScale;
+        float2 center4 = float2(0.7, 0.2) + float2(cos(time * 0.2), sin(time * 0.3)) * 0.1 * breathScale;
         
         float d1 = distance(uv, center1);
         float d2 = distance(uv, center2);
         float d3 = distance(uv, center3);
+        float d4 = distance(uv, center4);
         
-        // Smooth color blending with noise modulation
-        float w1 = smoothstep(1.0, 0.0, d1 * 1.5) * (0.7 + noise1 * 0.3);
-        float w2 = smoothstep(1.0, 0.0, d2 * 1.5) * (0.7 + noise2 * 0.3);
-        float w3 = smoothstep(1.0, 0.0, d3 * 1.5) * (0.7 + noise3 * 0.3);
+        // Smooth color blending with noise modulation - ENHANCED vibrancy
+        float w1 = smoothstep(1.2, 0.0, d1 * 1.3) * (0.6 + noise1 * 0.4);
+        float w2 = smoothstep(1.2, 0.0, d2 * 1.3) * (0.6 + noise2 * 0.4);
+        float w3 = smoothstep(1.0, 0.0, d3 * 1.4) * (0.7 + noise3 * 0.3);
+        float w4 = smoothstep(0.8, 0.0, d4 * 1.5) * (0.5 + noise4 * 0.5);
         
-        float total = w1 + w2 + w3 + 0.001;
+        float total = w1 + w2 + w3 + w4 + 0.001;
         w1 /= total;
         w2 /= total;
         w3 /= total;
+        w4 /= total;
         
+        // More vibrant color mixing with accent color
         float3 color = color1 * w1 + color2 * w2 + color3 * w3;
         
-        // Add subtle vignette
-        float vignette = 1.0 - smoothstep(0.4, 1.0, length(uv - 0.5));
-        color *= 0.8 + vignette * 0.2;
+        // Add subtle color accent based on fourth weight
+        float3 accentColor = mix(color1, color2, 0.5) * 1.3;
+        color = mix(color, accentColor, w4 * 0.3);
+        
+        // Boost saturation for vibrancy
+        float gray = dot(color, float3(0.299, 0.587, 0.114));
+        color = mix(float3(gray, gray, gray), color, 1.25);
+        
+        // Add subtle vignette with softer falloff
+        float vignette = 1.0 - smoothstep(0.5, 1.1, length(uv - 0.5));
+        color *= 0.75 + vignette * 0.25;
+        
+        // Slight brightness boost for glass blur to look better
+        color *= 1.15;
         
         return half4(color, 1.0);
     }
@@ -209,6 +227,181 @@ private fun createParticle(
         shape = ParticleShape.entries.toTypedArray().random(),
         color = color
     )
+}
+
+/**
+ * Foreground Particle Field - Small, fast particles that pass IN FRONT of the glass
+ * Creates depth perception by having sharp particles in front of the blurred glass
+ */
+@Composable
+fun ForegroundParticleField(
+    modifier: Modifier = Modifier,
+    time: Calendar,
+    particleCount: Int = 12,
+    baseColor: Color = Color(0xFF00F0FF)
+) {
+    val second = time.get(Calendar.SECOND)
+    
+    // Brighter, more visible colors for foreground particles
+    val foregroundColors = remember {
+        listOf(
+            Color.White.copy(alpha = 0.7f),
+            Color(0xFF00F0FF).copy(alpha = 0.6f),
+            Color(0xFFFF006E).copy(alpha = 0.5f),
+        )
+    }
+    
+    var particles by remember { mutableStateOf<List<TimeParticle>>(emptyList()) }
+    var canvasSize by remember { mutableStateOf(IntSize(1080, 1920)) }
+    
+    // Initialize smaller, faster foreground particles
+    LaunchedEffect(Unit) {
+        particles = List(particleCount) { index ->
+            createForegroundParticle(index, canvasSize, foregroundColors.random())
+        }
+    }
+    
+    // Pre-calculate drift factor outside animation loop for better performance
+    val driftMultiplier = 0.5f
+    
+    // Animate particles - faster movement for foreground
+    LaunchedEffect(Unit) {
+        while (true) {
+            particles = particles.map { particle ->
+                // Use simplified drift calculation instead of sin() for better performance
+                // Approximates sine wave with triangle wave for slight horizontal wobble
+                val driftPhase = (particle.y % 200f) / 100f - 1f // Range -1 to 1
+                val drift = driftPhase * driftMultiplier
+                
+                particle.copy(
+                    y = particle.y - particle.speed,
+                    x = particle.x + drift,
+                    rotation = particle.rotation + particle.rotationSpeed,
+                    alpha = (particle.alpha * 0.998f).coerceIn(0.2f, 0.8f) // Slow fade
+                ).let {
+                    // Reset particle when it goes off screen
+                    if (it.y < -50) {
+                        createForegroundParticle(it.id, canvasSize, foregroundColors.random())
+                    } else it
+                }
+            }
+            delay(16) // ~60fps
+        }
+    }
+    
+    // Subtle pulse synced to seconds
+    val pulseScale by animateFloatAsState(
+        targetValue = if (second % 2 == 0) 1.15f else 1f,
+        animationSpec = tween(400, easing = FastOutSlowInEasing),
+        label = "fgPulse"
+    )
+    
+    Canvas(
+        modifier = modifier.fillMaxSize()
+    ) {
+        canvasSize = IntSize(size.width.toInt(), size.height.toInt())
+        
+        particles.forEach { particle ->
+            drawForegroundParticle(particle, pulseScale)
+        }
+    }
+}
+
+/**
+ * Create smaller, faster particles for the foreground layer
+ */
+private fun createForegroundParticle(
+    id: Int,
+    size: IntSize,
+    color: Color
+): TimeParticle {
+    return TimeParticle(
+        id = id,
+        x = Random.nextFloat() * size.width,
+        y = size.height + Random.nextFloat() * 100,
+        size = Random.nextFloat() * 8 + 2, // Much smaller (2-10px)
+        alpha = Random.nextFloat() * 0.4f + 0.4f, // Brighter (0.4-0.8)
+        speed = Random.nextFloat() * 4f + 2f, // Faster (2-6px per frame)
+        rotation = Random.nextFloat() * 360,
+        rotationSpeed = (Random.nextFloat() - 0.5f) * 4, // Faster rotation
+        shape = listOf(ParticleShape.CIRCLE, ParticleShape.DOT_CLUSTER, ParticleShape.DIAMOND).random(),
+        color = color
+    )
+}
+
+/**
+ * Draw foreground particles with sharper, more defined appearance
+ */
+private fun DrawScope.drawForegroundParticle(particle: TimeParticle, pulseScale: Float) {
+    val adjustedSize = particle.size * pulseScale
+    val center = Offset(particle.x, particle.y)
+    
+    when (particle.shape) {
+        ParticleShape.CIRCLE -> {
+            // Sharp circle with soft glow
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = particle.alpha * 0.9f),
+                        particle.color.copy(alpha = particle.alpha * 0.6f),
+                        particle.color.copy(alpha = 0f)
+                    ),
+                    center = center,
+                    radius = adjustedSize * 2
+                ),
+                radius = adjustedSize * 2,
+                center = center
+            )
+            // Bright core
+            drawCircle(
+                color = Color.White.copy(alpha = particle.alpha),
+                radius = adjustedSize * 0.5f,
+                center = center
+            )
+        }
+        ParticleShape.DOT_CLUSTER -> {
+            // Sparkle effect
+            for (i in 0..2) {
+                val angle = Math.toRadians((120.0 * i) + particle.rotation)
+                val dotOffset = Offset(
+                    center.x + (adjustedSize * cos(angle)).toFloat(),
+                    center.y + (adjustedSize * sin(angle)).toFloat()
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = particle.alpha * 0.8f),
+                    radius = 1.5f,
+                    center = dotOffset
+                )
+            }
+            // Center dot
+            drawCircle(
+                color = Color.White.copy(alpha = particle.alpha),
+                radius = 2f,
+                center = center
+            )
+        }
+        ParticleShape.DIAMOND -> {
+            // Small sharp diamond
+            rotate(particle.rotation, center) {
+                val path = Path().apply {
+                    moveTo(center.x, center.y - adjustedSize)
+                    lineTo(center.x + adjustedSize * 0.5f, center.y)
+                    lineTo(center.x, center.y + adjustedSize)
+                    lineTo(center.x - adjustedSize * 0.5f, center.y)
+                    close()
+                }
+                drawPath(path, Color.White.copy(alpha = particle.alpha * 0.7f))
+            }
+        }
+        else -> {
+            // Default to bright dot
+            drawCircle(
+                color = Color.White.copy(alpha = particle.alpha),
+                radius = adjustedSize,
+                center = center
+            )
+        }
+    }
 }
 
 private fun DrawScope.drawParticle(particle: TimeParticle, pulseScale: Float) {
