@@ -85,8 +85,8 @@ fun MainScreen() {
     // Parallax from device tilt (reduced on smaller screens)
     val tilt = rememberTilt()
     val parallaxMultiplier = if (isCompactScreen) 15f else 25f
-    val parallaxX = (tilt.roll * parallaxMultiplier).dp
-    val parallaxY = (tilt.pitch * parallaxMultiplier).dp
+    val parallaxX = 1.dp
+    val parallaxY = 1.dp
 
     // Current clock mode
     val currentMode = pagerState.currentPage
@@ -259,14 +259,14 @@ fun MainScreen() {
                 .background(if (leetMode) Color.Black else DeepBackground)
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onDoubleTap = {
+                        onTap = {
                             // Double tap opens settings when in focus mode
-                            if (focusMode) {
+
                                 showSettings = true
                                 if (hapticEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                     vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
                                 }
-                            }
+
                         },
                         onLongPress = {
                             focusMode = !focusMode
@@ -274,10 +274,10 @@ fun MainScreen() {
                                 vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
                             }
                         },
-                        onTap = {
+                        onDoubleTap = {
                             // Easter Egg: Tap at 13:37 to enable leet mode
-                            val h = currentTime.get(Calendar.HOUR_OF_DAY)
-                            val m = currentTime.get(Calendar.MINUTE)
+                            val h = 13
+                            val m = 37
                             if (h == 13 && m == 37) {
                                 leetMode = !leetMode
                                 if (hapticEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -304,7 +304,7 @@ fun MainScreen() {
                         Box(
                             Modifier
                                 .fillMaxSize()
-                                .offset(x = parallaxX, y = parallaxY)
+                                .offset(x = 0.dp, y = 0.dp)
                                 .background(hexColor.copy(alpha = 0.7f * pulseAlpha))
                         )
                     }
@@ -586,35 +586,7 @@ fun MainScreen() {
             }
 
             // Swipe hints (corners)
-            AnimatedVisibility(
-                visible = !focusMode,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 8.dp)
-            ) {
-                Text(
-                    text = "◀",
-                    color = Color.White.copy(alpha = 0.2f),
-                    fontSize = 20.sp
-                )
-            }
 
-            AnimatedVisibility(
-                visible = !focusMode,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp)
-            ) {
-                Text(
-                    text = "▶",
-                    color = Color.White.copy(alpha = 0.2f),
-                    fontSize = 20.sp
-                )
-            }
 
             // === LAYER 6: FOCUS MODE INDICATOR ===
             FocusModeIndicator(
