@@ -1,16 +1,13 @@
 <div align="center">
 
 <!-- PROJECT LOGO -->
-<img src="https://via.placeholder.com/150/2196F3/FFFFFF?text=ChronoTime" alt="ChronoTime Logo" width="120" height="120">
+<img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" alt="ChronoTime Logo" width="120" height="120">
 
 # ChronoTime
 
 **Time. Reimagined.**
 
 <p>
-  <a href="https://github.com/ProfessorQuantumUniverse/ChronoTime/releases/latest">
-    <img src="https://img.shields.io/github/v/release/ProfessorQuantumUniverse/ChronoTime?style=for-the-badge&color=2196F3" alt="Latest Release">
-  </a>
   <a href="https://github.com/ProfessorQuantumUniverse/ChronoTime/stargazers">
     <img src="https://img.shields.io/github/stars/ProfessorQuantumUniverse/ChronoTime?style=for-the-badge&color=ffcb2d" alt="Stars">
   </a>
@@ -28,8 +25,7 @@
 <h3>
   <a href="#features">Features</a> •
   <a href="#clock-faces">Clock Faces</a> •
-  <a href="#download">Download</a> •
-  <a href="#screenshots">Screenshots</a>
+  <a href="#download">Download</a>
 </h3>
 
 <br />
@@ -85,20 +81,6 @@ ChronoTime includes 8 unique ways to visualize the passing of time:
 ChronoTime has no public release yet. Download buttons for Google Play, F-Droid and GitHub will show up here as soon as it is published.
 
 Until then you can build it yourself with `./gradlew assembleRelease`.
-
----
-
-## 📸 Screenshots
-
-<!-- PRO TIP: Create a grid of screenshots here. Replace URLs with actual images -->
-
-| Liquid Home | Berlin Clock | Binary Mode |
-|:-----------:|:------------:|:-----------:|
-| <img src="https://via.placeholder.com/250x500?text=Liquid+UI" width="200"> | <img src="https://via.placeholder.com/250x500?text=Berlin+Clock" width="200"> | <img src="https://via.placeholder.com/250x500?text=Binary" width="200"> |
-
-| Settings | Matrix Mode | Focus Mode |
-|:--------:|:-----------:|:----------:|
-| <img src="https://via.placeholder.com/250x500?text=Settings" width="200"> | <img src="https://via.placeholder.com/250x500?text=Matrix" width="200"> | <img src="https://via.placeholder.com/250x500?text=Focus" width="200"> |
 
 ---
 
