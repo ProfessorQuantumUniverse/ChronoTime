@@ -82,25 +82,9 @@ ChronoTime includes 8 unique ways to visualize the passing of time:
 
 ## 📲 Download
 
-Get the latest version of ChronoTime on your preferred platform:
+ChronoTime has no public release yet. Download buttons for Google Play, F-Droid and GitHub will show up here as soon as it is published.
 
-
-<div align="center">
-# Coming soon!!!
-<a href="https://play.google.com/">
-  <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80">
-</a>
-# Coming soon!!!
-<a href="https://f-droid.org/">
-  <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on-en.png" alt="Get it on F-Droid" height="80">
-</a>
-
-<!-- Fallback for direct APK -->
-<a href="https://github.com/ProfessorQuantumUniverse/ChronoTime/releases/latest">
-  <img src="https://img.shields.io/badge/Download-APK-2196F3?style=for-the-badge&logo=github&logoColor=white" height="55" alt="Download APK">
-</a>
-
-</div>
+Until then you can build it yourself with `./gradlew assembleRelease`.
 
 ---
 
